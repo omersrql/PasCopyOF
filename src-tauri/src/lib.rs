@@ -228,7 +228,7 @@ async fn unlock_vault(
         .map_err(|_| "Vault not initialized".to_string())?;
     
     // Derive key from provided password + stored salt
-    let key = derive_key(&master_password, &salt_hex).map_err(|e| e.to_string())?;
+    let key = derive_key(&masterPassword, &salt_hex).map_err(|e| e.to_string())?;
     
     // Verify the password by checking against a stored verification blob
     // On first unlock after init, there may be no verification blob - store one
@@ -283,8 +283,8 @@ async fn change_master_password(
     rand::thread_rng().fill_bytes(&mut salt_bytes);
     let new_salt_hex = hex::encode(salt_bytes);
     
-    let new_key = derive_key(&new_password, &new_salt_hex).map_err(|e| e.to_string())?;
-    
+    let new_key = derive_key(&newPassword, &new_salt_hex).map_err(|e| e.to_string())?;
+
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
     
     // Re-encrypt all credentials
