@@ -1,20 +1,73 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# PasCopyOf
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+A lightweight, cross-platform password vault and clipboard launcher designed for system administrators.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Features
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+-   **Spotlight-style Launcher**: Global shortcut (`Ctrl + Shift + Space`) opens a minimal search window.
+-   **Blazing Fast**: Local search matching `key_name` with instant filtering.
+-   **Security First**:
+    -   Master password protection.
+    -   **Argon2id** key derivation.
+    -   **AES-256-GCM** encryption for all stored credentials.
+    -   Data stored in a local **SQLite** database.
+-   **Clipboard Safety**: Automatically clears the clipboard 15 seconds after copying.
+-   **Management UI**: Simple interface to add, edit, or delete credentials.
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Technical Stack
+
+-   **Frontend**: React + TypeScript + Vite
+-   **Backend**: Rust (Tauri v2)
+-   **Database**: SQLite (via `rusqlite`)
+-   **Encryption**: `aes-gcm` and `argon2` crates
+
+## Development
+
+### Prerequisites
+
+1.  **Node.js**: [LTS version](https://nodejs.org/)
+2.  **Rust**: [rustup.rs](https://rustup.rs/)
+3.  **OS Specific Dependencies**:
+    -   **Windows**: [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+    -   **Linux**: `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
+    -   **macOS**: Xcode or Command Line Tools
+
+### Setup & Run
+
+```powershell
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run tauri dev
+```
+
+## Build Instructions
+
+### Windows
+```powershell
+npm run tauri build
+```
+Generates a `.msi` and `.exe` in `src-tauri/target/release/bundle/msi/`.
+
+### Linux
+```bash
+npm run tauri build
+```
+Generates `.deb` and `AppImage` in `src-tauri/target/release/bundle/`.
+
+### macOS
+```bash
+npm run tauri build
+```
+Generates `.app` and `.dmg` in `src-tauri/target/release/bundle/`.
+
+## Security Model
+
+The application follows a simple but solid security model:
+1. When first run, the user sets a **Master Password**.
+2. A random 32-byte salt is generated and stored in the SQLite database.
+3. The master password and salt are processed through **Argon2id** to derive a 256-bit encryption key.
+4. This key stays only in the Rust backend's memory while the vault is unlocked.
+5. All passwords are encrypted with **AES-256-GCM** before being saved to the database.
+6. Decryption only happens at the moment a user clicks "Copy".
