@@ -2,7 +2,7 @@
  * Toast.tsx — Lightweight notification component.
  * Shows a brief message when a password is copied to clipboard.
  */
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 export type ToastType = "success" | "error" | "info";
 

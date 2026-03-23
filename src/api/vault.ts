@@ -79,12 +79,12 @@ export async function searchCredentials(query: string): Promise<CredentialSafe[]
 
 /** Add a new credential. Password is encrypted by Rust before storage. */
 export async function addCredential(params: AddCredentialParams): Promise<number> {
-  return invoke<number>("add_credential", params);
+  return invoke<number>("add_credential", params as unknown as Record<string, unknown>);
 }
 
 /** Update an existing credential. If password is empty, the old one is kept. */
 export async function updateCredential(params: UpdateCredentialParams): Promise<void> {
-  return invoke<void>("update_credential", params);
+  return invoke<void>("update_credential", params as unknown as Record<string, unknown>);
 }
 
 /** Delete a credential by ID. */

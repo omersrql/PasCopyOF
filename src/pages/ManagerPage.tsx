@@ -1,7 +1,7 @@
 /**
  * ManagerPage.tsx — Vault management interface.
  */
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { ToastContainer } from "../components/Toast";
 import { useToast } from "../hooks/useToast";
@@ -11,7 +11,6 @@ import {
   updateCredential,
   deleteCredential,
   getDecryptedPassword,
-  copyPassword,
   lockVault,
   changeMasterPassword,
   isVaultUnlocked,
@@ -46,8 +45,6 @@ export default function ManagerPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [changePwForm, setChangePwForm] = useState({ current: "", next: "", confirm: "" });
-  const [changePwError, setChangePwError] = useState("");
-  const [changePwLoading, setChangePwLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { toasts, showToast, removeToast } = useToast();
@@ -160,15 +157,6 @@ export default function ManagerPage() {
     }
   }
 
-  async function handleCopyFromManager(id: number, keyName: string) {
-    try {
-      await copyPassword(id);
-      showToast(`🔑  "${keyName}" copied — clears in 15s`, "success");
-    } catch (err) {
-      showToast(`Failed to copy: ${String(err)}`, "error");
-    }
-  }
-
   async function handleLock() {
     await lockVault();
     setUnlocked(false);
@@ -181,27 +169,23 @@ export default function ManagerPage() {
 
   async function handleChangeMasterPassword(e: React.FormEvent) {
     e.preventDefault();
-    setChangePwError("");
 
     if (changePwForm.next.length < 8) {
-      setChangePwError("New password must be at least 8 characters.");
+      showToast("New password must be at least 8 characters.", "error");
       return;
     }
     if (changePwForm.next !== changePwForm.confirm) {
-      setChangePwError("New passwords do not match.");
+      showToast("New passwords do not match.", "error");
       return;
     }
 
-    setChangePwLoading(true);
     try {
       await changeMasterPassword(changePwForm.current, changePwForm.next);
       showToast("✓ Master password changed", "success");
       setShowChangePassword(false);
       setChangePwForm({ current: "", next: "", confirm: "" });
     } catch (err) {
-      setChangePwError(String(err));
-    } finally {
-      setChangePwLoading(false);
+      showToast(String(err), "error");
     }
   }
 
@@ -216,15 +200,6 @@ export default function ManagerPage() {
   function getInitials(name: string) {
     if (!name) return "??";
     return name.slice(0, 2).toLowerCase();
-  }
-
-  function formatDate(iso: string) {
-    if (!iso) return "—";
-    try {
-      return new Date(iso).toLocaleDateString();
-    } catch {
-      return iso;
-    }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -384,6 +359,13 @@ export default function ManagerPage() {
                     className="form-input"
                     value={changePwForm.next}
                     onChange={(e) => setChangePwForm({ ...changePwForm, next: e.target.value })}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Confirm New Password"
+                    className="form-input"
+                    value={changePwForm.confirm}
+                    onChange={(e) => setChangePwForm({ ...changePwForm, confirm: e.target.value })}
                   />
                   <div className="modal-actions">
                     <button type="button" className="btn btn-secondary" onClick={() => setShowChangePassword(false)}>Cancel</button>
