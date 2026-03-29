@@ -6,11 +6,19 @@ import { invoke } from "@tauri-apps/api/core";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface Category {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+}
+
 export interface CredentialSafe {
   id: number;
   keyName: string;
   username: string;
   notes: string;
+  categoryId: number | null;
   createdAt: string;
 }
 
@@ -19,6 +27,7 @@ export interface AddCredentialParams {
   username: string;
   password: string;
   notes: string;
+  categoryId: number | null;
 }
 
 export interface UpdateCredentialParams {
@@ -27,6 +36,7 @@ export interface UpdateCredentialParams {
   username: string;
   password: string; // empty string = keep existing
   notes: string;
+  categoryId: number | null;
 }
 
 // ─── Vault lifecycle ──────────────────────────────────────────────────────────
@@ -67,14 +77,37 @@ export async function changeMasterPassword(
   return invoke<void>("change_master_password", { currentPassword, newPassword });
 }
 
+// ─── Categories ─────────────────────────────────────────────────────────────
+
+/** Get all categories. */
+export async function getCategories(): Promise<Category[]> {
+  return invoke<Category[]>("get_categories");
+}
+
+/** Add a new category. */
+export async function addCategory(name: string, icon: string, color: string): Promise<number> {
+  return invoke<number>("add_category", { name, icon, color });
+}
+
+/** Update an existing category. */
+export async function updateCategory(id: number, name: string, icon: string, color: string): Promise<void> {
+  return invoke<void>("update_category", { id, name, icon, color });
+}
+
+/** Delete a category. */
+export async function deleteCategory(id: number): Promise<void> {
+  return invoke<void>("delete_category", { id });
+}
+
 // ─── Credentials ─────────────────────────────────────────────────────────────
 
 /**
  * Search credentials by key_name (case-insensitive, partial match).
+ * Optionally filter by categoryId.
  * Returns safe credentials — passwords are never included.
  */
-export async function searchCredentials(query: string): Promise<CredentialSafe[]> {
-  return invoke<CredentialSafe[]>("search_credentials", { query });
+export async function searchCredentials(query: string, categoryId: number | null = null): Promise<CredentialSafe[]> {
+  return invoke<CredentialSafe[]>("search_credentials", { query, categoryId });
 }
 
 /** Add a new credential. Password is encrypted by Rust before storage. */

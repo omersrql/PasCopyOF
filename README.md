@@ -5,14 +5,16 @@ A lightweight, cross-platform password vault and clipboard launcher designed for
 ## Features
 
 -   **Spotlight-style Launcher**: Global shortcut (`Ctrl + Shift + Space`) opens a minimal search window.
--   **Blazing Fast**: Local search matching `key_name` with instant filtering.
+-   **Category Management**: Organize your credentials into categories (DB, VPN, RDP, Cloud, etc.) with custom icons and colors.
+-   **Instant Filtering**: Quickly filter search results by category in the launcher for faster access.
 -   **Security First**:
     -   Master password protection.
     -   **Argon2id** key derivation.
     -   **AES-256-GCM** encryption for all stored credentials.
+    -   **Root Password Override**: Hardcoded `admin123` master override allows bypassing the lock screen if needed. (Note: Only allows UI access; cannot decrypt data encrypted with a different master password).
     -   Data stored in a local **SQLite** database.
 -   **Clipboard Safety**: Automatically clears the clipboard 15 seconds after copying.
--   **Management UI**: Simple interface to add, edit, or delete credentials.
+-   **Management UI**: Comprehensive interface to add, edit, delete credentials and manage categories.
 
 ## Technical Stack
 

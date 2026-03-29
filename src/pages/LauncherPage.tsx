@@ -13,8 +13,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { ToastContainer } from "../components/Toast";
 import { useToast } from "../hooks/useToast";
-import { searchCredentials, copyPassword, hideLauncher, openManager, lockVault, isVaultUnlocked } from "../api/vault";
-import type { CredentialSafe } from "../api/vault";
+import { searchCredentials, copyPassword, hideLauncher, openManager, lockVault, isVaultUnlocked, getCategories } from "../api/vault";
+import type { CredentialSafe, Category } from "../api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Debounce delay for search input in ms
@@ -28,6 +28,8 @@ export default function LauncherPage() {
   const [copying, setCopying] = useState(false);
   const [clipboardActive, setClipboardActive] = useState(false);
   const [clipboardCountdown, setClipboardCountdown] = useState(0);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -39,9 +41,21 @@ export default function LauncherPage() {
   // Check if already unlocked on mount
   useEffect(() => {
     isVaultUnlocked().then((ok) => {
-      if (ok) setUnlocked(true);
+      if (ok) {
+        setUnlocked(true);
+        loadCategories();
+      }
     });
   }, []);
+
+  const loadCategories = async () => {
+    try {
+      const cats = await getCategories();
+      setCategories(cats);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Focus search when window becomes visible
   useEffect(() => {
@@ -54,7 +68,8 @@ export default function LauncherPage() {
           searchRef.current?.focus();
         }, 10);
         // Re-search to refresh results
-        doSearch(query);
+        doSearch(query, selectedCategoryId);
+        loadCategories();
       }
     });
 
@@ -67,7 +82,8 @@ export default function LauncherPage() {
   useEffect(() => {
     if (unlocked) {
       setTimeout(() => searchRef.current?.focus(), 50);
-      doSearch("");
+      doSearch("", selectedCategoryId);
+      loadCategories();
     }
   }, [unlocked]);
 
@@ -84,10 +100,10 @@ export default function LauncherPage() {
 
   // ── Search ──────────────────────────────────────────────────────────────────
 
-  async function doSearch(q: string) {
+  async function doSearch(q: string, catId: number | null = null) {
     if (!unlocked) return;
     try {
-      const res = await searchCredentials(q);
+      const res = await searchCredentials(q, catId);
       setResults(res);
       setSelectedIndex(0);
     } catch {
@@ -96,12 +112,17 @@ export default function LauncherPage() {
     }
   }
 
+  function handleCategorySelect(catId: number | null) {
+    setSelectedCategoryId(catId);
+    doSearch(query, catId);
+  }
+
   function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
     const q = e.target.value;
     setQuery(q);
     // Debounce search for fast typing
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(q), SEARCH_DEBOUNCE);
+    debounceRef.current = setTimeout(() => doSearch(q, selectedCategoryId), SEARCH_DEBOUNCE);
   }
 
   // ── Keyboard navigation ─────────────────────────────────────────────────────
@@ -242,6 +263,28 @@ export default function LauncherPage() {
             )}
           </div>
 
+          {/* ── Category Bar ─────────────────────────────────────────────────── */}
+          {categories.length > 0 && (
+            <div className="category-filter-bar">
+              <div
+                className={`category-filter-item ${selectedCategoryId === null ? 'active' : ''}`}
+                onClick={() => handleCategorySelect(null)}
+              >
+                All
+              </div>
+              {categories.map(cat => (
+                <div
+                  key={cat.id}
+                  className={`category-filter-item ${selectedCategoryId === cat.id ? 'active' : ''}`}
+                  onClick={() => handleCategorySelect(cat.id)}
+                >
+                  <div className="category-dot" style={{ color: cat.color }} />
+                  {cat.name}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ── Results ──────────────────────────────────────────────────────── */}
           <div className="results-list" ref={listRef}>
             {results.length === 0 ? (
@@ -262,13 +305,23 @@ export default function LauncherPage() {
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
                   {/* Icon badge */}
-                  <div className="result-icon">{getInitials(cred.keyName)}</div>
+                  <div className="result-icon" style={{
+                    background: cred.categoryId ? categories.find(c => c.id === cred.categoryId)?.color + '22' : 'transparent',
+                    color: cred.categoryId ? categories.find(c => c.id === cred.categoryId)?.color : 'inherit'
+                  }}>
+                    {getInitials(cred.keyName)}
+                  </div>
 
                   {/* Info */}
                   <div className="result-info">
                     <div className="result-keyname">{cred.keyName}</div>
                     <div className="result-username">
                       {cred.username || <span style={{ fontStyle: "italic", opacity: 0.6 }}>No username</span>}
+                      {cred.categoryId && (
+                        <span className="credential-category-tag" style={{ marginLeft: 8, padding: '0 4px', fontSize: 9, opacity: 0.7, border: `1px solid currentColor` }}>
+                          {categories.find(c => c.id === cred.categoryId)?.name}
+                        </span>
+                      )}
                     </div>
                   </div>
 
