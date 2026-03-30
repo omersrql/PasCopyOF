@@ -1,3 +1,5 @@
+# Team Foundation Version Control (TFVC) ignore file
+
 # Logs
 logs
 *.log
@@ -8,25 +10,20 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Dependencies
-node_modules
-dist
-dist-ssr
+\node_modules
+\dist
+\dist-ssr
 
 # Rust/Tauri
-src-tauri/target/
-src-tauri/gen/
-src-tauri/bin/
+\src-tauri\target
+\src-tauri\gen
+\src-tauri\bin
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
+# IDE files
+.vscode\
+.idea\
 *.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+*.user
 
 # Environment secrets
 .env
@@ -34,3 +31,7 @@ src-tauri/bin/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# OS files
+.DS_Store
+thumbs.db
