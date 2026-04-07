@@ -1,5 +1,8 @@
 # Team Foundation Version Control (TFVC) ignore file
 
+# Git
+.git\
+
 # Logs
 logs
 *.log
@@ -10,14 +13,14 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Dependencies
-\node_modules
-\dist
-\dist-ssr
+node_modules\
+dist\
+dist-ssr\
 
 # Rust/Tauri
-\src-tauri\target
-\src-tauri\gen
-\src-tauri\bin
+src-tauri\target\
+src-tauri\gen\
+src-tauri\bin\
 
 # IDE files
 .vscode\
