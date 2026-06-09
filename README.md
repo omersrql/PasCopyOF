@@ -1,6 +1,6 @@
 # PasCopyOf
 
-A lightweight, cross-platform password vault and clipboard launcher designed for system administrators.
+Fast and Secure Password Copy Tool. A lightweight, cross-platform password vault and clipboard launcher designed for system administrators.
 
 ## Features
 
