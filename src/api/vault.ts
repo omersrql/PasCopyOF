@@ -156,3 +156,15 @@ export async function hideLauncher(): Promise<void> {
 export async function openManager(): Promise<void> {
   return invoke<void>("open_manager");
 }
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+/** Current global shortcut that toggles the launcher (e.g. "Ctrl+Shift+Space"). */
+export async function getLauncherShortcut(): Promise<string> {
+  return invoke<string>("get_launcher_shortcut");
+}
+
+/** Change the global launcher shortcut. Persisted across restarts. */
+export async function setLauncherShortcut(shortcut: string): Promise<void> {
+  return invoke<void>("set_launcher_shortcut", { shortcut });
+}

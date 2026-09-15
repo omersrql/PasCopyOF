@@ -2,7 +2,7 @@
  * LauncherPage.tsx — The Spotlight-style search launcher.
  *
  * This is the primary interface. Features:
- *  - Global shortcut (Ctrl+Shift+Space) shows/hides this window
+ *  - Global shortcut (configurable; default Ctrl+Shift+Space) shows/hides this window
  *  - Typing instantly filters credentials by key_name
  *  - Arrow keys navigate the list
  *  - Enter / click copies the password to clipboard

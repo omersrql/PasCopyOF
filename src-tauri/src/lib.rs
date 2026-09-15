@@ -17,10 +17,11 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Nonce, Key,
 };
-use argon2::{Argon2, password_hash::PasswordHasher};
-use argon2::password_hash::SaltString;
+use argon2::Argon2;
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use rand::RngCore;
+
+const DEFAULT_LAUNCHER_SHORTCUT: &str = "Ctrl+Shift+Space";
 
 // ─── State shared across Tauri commands ─────────────────────────────────────
 
@@ -29,6 +30,7 @@ pub struct AppState {
     pub db_path: PathBuf,
     pub encryption_key: Option<[u8; 32]>,
     pub clipboard_clear_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub launcher_shortcut: String,
 }
 
 pub struct SafeAppState(pub Mutex<AppState>);
@@ -195,6 +197,109 @@ fn open_db(path: &PathBuf) -> Result<Connection> {
     }
     
     Ok(conn)
+}
+
+fn get_meta(conn: &Connection, key: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT value FROM meta WHERE key = ?1",
+        params![key],
+        |row| row.get(0),
+    )
+    .ok()
+}
+
+fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
+fn toggle_launcher_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("launcher") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+fn register_launcher_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut: Shortcut = shortcut_str
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                toggle_launcher_window(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let show_launcher =
+        MenuItem::with_id(app, "show_launcher", "Show Launcher", true, None::<&str>)?;
+    let open_manager =
+        MenuItem::with_id(app, "open_manager", "Open Manager", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit PasCopyOf", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_launcher, &open_manager, &separator, &quit])?;
+
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or("Missing default window icon")?;
+
+    TrayIconBuilder::with_id("main")
+        .icon(icon)
+        .tooltip("PasCopyOf - Password Vault")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show_launcher" => {
+                if let Some(window) = app.get_webview_window("launcher") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            "open_manager" => {
+                if let Some(window) = app.get_webview_window("manager") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                } else {
+                    let _ = WebviewWindowBuilder::new(
+                        app,
+                        "manager",
+                        WebviewUrl::App("index.html#/manager".into()),
+                    )
+                    .title("PasCopyOf - Vault Manager")
+                    .inner_size(900.0, 600.0)
+                    .min_inner_size(800.0, 500.0)
+                    .center()
+                    .build();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -749,6 +854,58 @@ async fn is_vault_unlocked(state: State<'_, SafeAppState>) -> Result<bool, Strin
     Ok(st.encryption_key.is_some())
 }
 
+/// Return the current global launcher shortcut (e.g. "Ctrl+Shift+Space").
+#[tauri::command]
+async fn get_launcher_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.launcher_shortcut.clone())
+}
+
+/// Change and persist the global launcher shortcut.
+#[tauri::command]
+async fn set_launcher_shortcut(
+    shortcut: String,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let shortcut = shortcut.trim().to_string();
+    if shortcut.is_empty() {
+        return Err("Shortcut cannot be empty".into());
+    }
+
+    // Validate before touching the current registration
+    shortcut
+        .parse::<Shortcut>()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+
+    let old_shortcut = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.launcher_shortcut.clone()
+    };
+
+    if shortcut == old_shortcut {
+        return Ok(());
+    }
+
+    if let Ok(old) = old_shortcut.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old);
+    }
+
+    if let Err(err) = register_launcher_hotkey(&app, &shortcut) {
+        // Roll back to the previous shortcut if the new one fails
+        let _ = register_launcher_hotkey(&app, &old_shortcut);
+        return Err(err);
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "launcher_shortcut", &shortcut).map_err(|e| e.to_string())?;
+    st.launcher_shortcut = shortcut;
+    Ok(())
+}
+
 // ─── App Entry Point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -769,36 +926,23 @@ pub fn run() {
             let db_path = data_dir.join("vault.db");
             
             // Initialize the database
-            open_db(&db_path).expect("Failed to initialize database");
+            let conn = open_db(&db_path).expect("Failed to initialize database");
+            let launcher_shortcut = get_meta(&conn, "launcher_shortcut")
+                .unwrap_or_else(|| DEFAULT_LAUNCHER_SHORTCUT.to_string());
             
             // Register app state
             app.manage(SafeAppState(Mutex::new(AppState {
                 db_path,
                 encryption_key: None,
                 clipboard_clear_handle: None,
+                launcher_shortcut: launcher_shortcut.clone(),
             })));
-            
-            // Register global shortcut: Ctrl+Shift+Space
-            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-            let app_handle = app.handle().clone();
-            
-            let shortcut: Shortcut = "Ctrl+Shift+Space".parse()
-                .expect("Invalid shortcut string");
-            
-            app.handle()
-                .global_shortcut()
-                .on_shortcut(shortcut, move |_app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        if let Some(window) = app_handle.get_webview_window("launcher") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                    }
-                })?;
+
+            // System tray: Show Launcher / Open Manager / Quit
+            setup_tray(app)?;
+
+            // Register persisted (or default) global shortcut
+            register_launcher_hotkey(app.handle(), &launcher_shortcut)?;
             
             // Show the launcher immediately for first-time setup
             if let Some(window) = app.get_webview_window("launcher") {
@@ -827,6 +971,8 @@ pub fn run() {
             add_category,
             update_category,
             delete_category,
+            get_launcher_shortcut,
+            set_launcher_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

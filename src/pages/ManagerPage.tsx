@@ -18,6 +18,8 @@ import {
   addCategory,
   updateCategory,
   deleteCategory,
+  getLauncherShortcut,
+  setLauncherShortcut,
 } from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
 
@@ -39,6 +41,30 @@ const emptyForm: FormState = {
   categoryId: null,
 };
 
+/** Build a Tauri-compatible shortcut string from a keyboard event. */
+function shortcutFromEvent(e: KeyboardEvent): string | null {
+  const modifiers: string[] = [];
+  if (e.ctrlKey || e.metaKey) modifiers.push("Ctrl");
+  if (e.altKey) modifiers.push("Alt");
+  if (e.shiftKey) modifiers.push("Shift");
+
+  const key = e.key;
+  if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
+    return null;
+  }
+
+  let keyName: string;
+  if (key === " ") keyName = "Space";
+  else if (key.length === 1) keyName = key.toUpperCase();
+  else keyName = key;
+
+  if (modifiers.length === 0) {
+    return null;
+  }
+
+  return [...modifiers, keyName].join("+");
+}
+
 export default function ManagerPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [credentials, setCredentials] = useState<CredentialSafe[]>([]);
@@ -54,6 +80,9 @@ export default function ManagerPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [catForm, setCatForm] = useState({ id: null as number | null, name: "", icon: "Key", color: "#0ea5e9" });
+  const [launcherShortcut, setLauncherShortcutState] = useState("Ctrl+Shift+Space");
+  const [recordingShortcut, setRecordingShortcut] = useState(false);
+  const [savingShortcut, setSavingShortcut] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { toasts, showToast, removeToast } = useToast();
@@ -64,9 +93,44 @@ export default function ManagerPage() {
       if (ok) {
         setUnlocked(true);
         loadCategories();
+        getLauncherShortcut().then(setLauncherShortcutState).catch(() => {});
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!recordingShortcut) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setRecordingShortcut(false);
+        return;
+      }
+
+      const next = shortcutFromEvent(e);
+      if (!next) return;
+
+      setRecordingShortcut(false);
+      void (async () => {
+        setSavingShortcut(true);
+        try {
+          await setLauncherShortcut(next);
+          setLauncherShortcutState(next);
+          showToast(`✓ Shortcut set to ${next}`, "success");
+        } catch (err) {
+          showToast(String(err), "error");
+        } finally {
+          setSavingShortcut(false);
+        }
+      })();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recordingShortcut, showToast]);
 
   const loadCategories = async () => {
     try {
@@ -228,7 +292,15 @@ export default function ManagerPage() {
 
   return (
     <div className="manager-root">
-      {!unlocked && <MasterPasswordAuth onUnlocked={() => setUnlocked(true)} />}
+      {!unlocked && (
+        <MasterPasswordAuth
+          onUnlocked={() => {
+            setUnlocked(true);
+            loadCategories();
+            getLauncherShortcut().then(setLauncherShortcutState).catch(() => {});
+          }}
+        />
+      )}
 
       {unlocked && (
         <>
@@ -244,7 +316,10 @@ export default function ManagerPage() {
             <div className="manager-topbar-right">
               <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>📂 Categories</button>
               <button className="btn btn-primary" onClick={handleNewCredential}>+ Add Credential</button>
-              <button className="btn btn-secondary" onClick={() => setShowChangePassword(true)}>🔑 Security</button>
+              <button className="btn btn-secondary" onClick={() => {
+                setShowChangePassword(true);
+                getLauncherShortcut().then(setLauncherShortcutState).catch(() => {});
+              }}>⚙ Settings</button>
               <button className="btn btn-secondary" onClick={handleLock}>🔒 Lock</button>
             </div>
           </div>
@@ -392,35 +467,93 @@ export default function ManagerPage() {
 
           {showChangePassword && (
             <div className="modal-overlay">
-              <div className="modal-card">
-                <div className="modal-title">Change Master Password</div>
-                <form onSubmit={handleChangeMasterPassword}>
-                  <input
-                    type="password"
-                    placeholder="Current Password"
-                    className="form-input"
-                    value={changePwForm.current}
-                    onChange={(e) => setChangePwForm({ ...changePwForm, current: e.target.value })}
-                  />
-                  <input
-                    type="password"
-                    placeholder="New Password"
-                    className="form-input"
-                    value={changePwForm.next}
-                    onChange={(e) => setChangePwForm({ ...changePwForm, next: e.target.value })}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Confirm New Password"
-                    className="form-input"
-                    value={changePwForm.confirm}
-                    onChange={(e) => setChangePwForm({ ...changePwForm, confirm: e.target.value })}
-                  />
-                  <div className="modal-actions">
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowChangePassword(false)}>Cancel</button>
-                    <button type="submit" className="btn btn-primary">Update</button>
+              <div className="modal-card" style={{ width: 420 }}>
+                <div className="modal-title">Settings</div>
+
+                <div className="settings-section">
+                  <div className="settings-section-title">Launcher Shortcut</div>
+                  <p className="settings-hint">
+                    Opens or hides the PasCopyOf launcher from anywhere.
+                  </p>
+                  <div className="shortcut-row">
+                    <div className={`shortcut-display ${recordingShortcut ? "recording" : ""}`}>
+                      {recordingShortcut ? "Press a new shortcut…" : launcherShortcut}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={savingShortcut}
+                      onClick={() => setRecordingShortcut(true)}
+                    >
+                      {recordingShortcut ? "Listening…" : "Change"}
+                    </button>
                   </div>
-                </form>
+                  {recordingShortcut && (
+                    <p className="settings-hint">Esc to cancel. Include Ctrl / Alt / Shift + a key.</p>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ marginTop: 8, alignSelf: "flex-start" }}
+                    disabled={savingShortcut || launcherShortcut === "Ctrl+Shift+Space"}
+                    onClick={async () => {
+                      setSavingShortcut(true);
+                      try {
+                        await setLauncherShortcut("Ctrl+Shift+Space");
+                        setLauncherShortcutState("Ctrl+Shift+Space");
+                        showToast("✓ Shortcut reset to Ctrl+Shift+Space", "success");
+                      } catch (err) {
+                        showToast(String(err), "error");
+                      } finally {
+                        setSavingShortcut(false);
+                      }
+                    }}
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">Change Master Password</div>
+                  <form onSubmit={handleChangeMasterPassword} className="editor-form" style={{ gap: 10 }}>
+                    <input
+                      type="password"
+                      placeholder="Current Password"
+                      className="form-input"
+                      value={changePwForm.current}
+                      onChange={(e) => setChangePwForm({ ...changePwForm, current: e.target.value })}
+                    />
+                    <input
+                      type="password"
+                      placeholder="New Password"
+                      className="form-input"
+                      value={changePwForm.next}
+                      onChange={(e) => setChangePwForm({ ...changePwForm, next: e.target.value })}
+                    />
+                    <input
+                      type="password"
+                      placeholder="Confirm New Password"
+                      className="form-input"
+                      value={changePwForm.confirm}
+                      onChange={(e) => setChangePwForm({ ...changePwForm, confirm: e.target.value })}
+                    />
+                    <div className="modal-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setShowChangePassword(false);
+                          setRecordingShortcut(false);
+                        }}
+                      >
+                        Close
+                      </button>
+                      <button type="submit" className="btn btn-primary">Update Password</button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           )}

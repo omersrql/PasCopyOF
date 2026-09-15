@@ -1,0 +1,22 @@
+{
+  "bundle": {
+    "shortDescription": "Hizli ve guvenli sifre kopyalama araci",
+    "longDescription": "PasCopyOf - Sistem yoneticileri icin hafif sifre kasasi ve pano baslaticisi. AES-256-GCM sifreleme, Argon2id ana sifre turetme ve global kisayol destegi.",
+    "category": "Utility",
+    "targets": ["nsis", "msi"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "languages": ["Turkish", "English"],
+        "displayLanguageSelector": true,
+        "installMode": "currentUser",
+        "startMenuFolder": "PasCopyOf",
+        "installerIcon": "icons/icon.ico",
+        "compression": "lzma"
+      }
+    }
+  }
+}

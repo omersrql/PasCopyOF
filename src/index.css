@@ -1082,6 +1082,62 @@ html, body, #root {
   justify-content: flex-end;
 }
 
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.settings-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.settings-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 4px 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-display {
+  flex: 1;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.shortcut-display.recording {
+  border-color: var(--color-accent, #0ea5e9);
+  color: var(--color-text-muted);
+  animation: pulse-border 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.25); }
+  50% { box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15); }
+}
+
 /* ── Section dividers ────────────────────────────────────────────────────── */
 .section-label {
   font-size: 10px;
