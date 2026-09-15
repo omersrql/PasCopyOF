@@ -1,23 +1,25 @@
 /**
- * LauncherPage.tsx — The Spotlight-style search launcher.
- *
- * This is the primary interface. Features:
- *  - Global shortcut (configurable; default Ctrl+Shift+Space) shows/hides this window
- *  - Typing instantly filters credentials by key_name
- *  - Arrow keys navigate the list
- *  - Enter / click copies the password to clipboard
- *  - Escape hides the window
- *  - Clipboard is auto-cleared after 15 seconds (handled in Rust)
+ * LauncherPage.tsx — Spotlight-style search launcher.
  */
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { ToastContainer } from "../components/Toast";
 import { useToast } from "../hooks/useToast";
-import { searchCredentials, copyPassword, hideLauncher, openManager, lockVault, isVaultUnlocked, getCategories } from "../api/vault";
+import { useVaultLock } from "../hooks/useVaultLock";
+import {
+  searchCredentials,
+  copyPassword,
+  copyUsername,
+  toggleFavorite,
+  hideLauncher,
+  openManager,
+  lockVault,
+  isVaultUnlocked,
+  getCategories,
+} from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-// Debounce delay for search input in ms
 const SEARCH_DEBOUNCE = 80;
 
 export default function LauncherPage() {
@@ -38,7 +40,14 @@ export default function LauncherPage() {
 
   const { toasts, showToast, removeToast } = useToast();
 
-  // Check if already unlocked on mount
+  const handleAutoLock = useCallback(() => {
+    setUnlocked(false);
+    setQuery("");
+    setResults([]);
+  }, []);
+
+  useVaultLock(handleAutoLock, unlocked);
+
   useEffect(() => {
     isVaultUnlocked().then((ok) => {
       if (ok) {
@@ -57,7 +66,6 @@ export default function LauncherPage() {
     }
   };
 
-  // Focus search when window becomes visible
   useEffect(() => {
     if (!unlocked) return;
 
@@ -67,7 +75,6 @@ export default function LauncherPage() {
         setTimeout(() => {
           searchRef.current?.focus();
         }, 10);
-        // Re-search to refresh results
         doSearch(query, selectedCategoryId);
         loadCategories();
       }
@@ -76,9 +83,8 @@ export default function LauncherPage() {
     return () => {
       unlisten.then((fn: () => void) => fn());
     };
-  }, [unlocked, query]);
+  }, [unlocked, query, selectedCategoryId]);
 
-  // Focus on mount / unlock
   useEffect(() => {
     if (unlocked) {
       setTimeout(() => searchRef.current?.focus(), 50);
@@ -87,7 +93,6 @@ export default function LauncherPage() {
     }
   }, [unlocked]);
 
-  // Keyboard shortcut listener
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -98,8 +103,6 @@ export default function LauncherPage() {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  // ── Search ──────────────────────────────────────────────────────────────────
-
   async function doSearch(q: string, catId: number | null = null) {
     if (!unlocked) return;
     try {
@@ -107,7 +110,6 @@ export default function LauncherPage() {
       setResults(res);
       setSelectedIndex(0);
     } catch {
-      // Vault was locked externally; re-lock the UI
       setUnlocked(false);
     }
   }
@@ -120,12 +122,9 @@ export default function LauncherPage() {
   function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
     const q = e.target.value;
     setQuery(q);
-    // Debounce search for fast typing
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(q, selectedCategoryId), SEARCH_DEBOUNCE);
   }
-
-  // ── Keyboard navigation ─────────────────────────────────────────────────────
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
@@ -138,34 +137,30 @@ export default function LauncherPage() {
       scrollSelectedIntoView();
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (results[selectedIndex]) {
-        handleCopy(results[selectedIndex]);
+      const cred = results[selectedIndex];
+      if (!cred) return;
+      if (e.ctrlKey || e.metaKey) {
+        handleCopyUsername(cred);
+      } else {
+        handleCopyPassword(cred);
       }
     }
   }
 
   function scrollSelectedIntoView() {
-    // Small delay to let state update first
     setTimeout(() => {
       const el = listRef.current?.querySelector(".result-item.selected");
       el?.scrollIntoView({ block: "nearest" });
     }, 10);
   }
 
-  // ── Copy behavior ───────────────────────────────────────────────────────────
-
-  async function handleCopy(cred: CredentialSafe) {
+  async function handleCopyPassword(cred: CredentialSafe) {
     if (copying) return;
     setCopying(true);
     try {
       await copyPassword(cred.id);
-
-      showToast(`🔑  "${cred.keyName}" copied — clears in 15s`, "success");
-
-      // Start countdown display
+      showToast(`🔑  "${cred.keyName}" password copied — clears in 15s`, "success");
       startClipboardCountdown();
-
-      // Close the launcher window after a short delay
       setTimeout(async () => {
         await handleClose();
       }, 600);
@@ -173,6 +168,36 @@ export default function LauncherPage() {
       showToast(`Failed to copy: ${String(err)}`, "error");
     } finally {
       setCopying(false);
+    }
+  }
+
+  async function handleCopyUsername(cred: CredentialSafe) {
+    if (copying) return;
+    setCopying(true);
+    try {
+      await copyUsername(cred.id);
+      showToast(`👤  "${cred.keyName}" username copied — clears in 15s`, "success");
+      startClipboardCountdown();
+      setTimeout(async () => {
+        await handleClose();
+      }, 600);
+    } catch (err) {
+      showToast(`Failed to copy username: ${String(err)}`, "error");
+    } finally {
+      setCopying(false);
+    }
+  }
+
+  async function handleToggleFavorite(e: React.MouseEvent, cred: CredentialSafe) {
+    e.stopPropagation();
+    try {
+      const next = await toggleFavorite(cred.id);
+      setResults((list) =>
+        list.map((item) => (item.id === cred.id ? { ...item, isFavorite: next } : item))
+      );
+      showToast(next ? "Added to favorites" : "Removed from favorites", "success");
+    } catch (err) {
+      showToast(String(err), "error");
     }
   }
 
@@ -191,8 +216,6 @@ export default function LauncherPage() {
       });
     }, 1000);
   }
-
-  // ── Window ──────────────────────────────────────────────────────────────────
 
   async function handleClose() {
     setQuery("");
@@ -213,9 +236,6 @@ export default function LauncherPage() {
     setResults([]);
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-
-  // Get initials for the icon badge
   function getInitials(name: string) {
     if (!name) return "??";
     return name.slice(0, 2).toLowerCase();
@@ -223,15 +243,11 @@ export default function LauncherPage() {
 
   return (
     <div className="launcher-root" data-tauri-drag-region>
-      {/* Master password gate */}
       {!unlocked && <MasterPasswordAuth onUnlocked={() => setUnlocked(true)} />}
 
-      {/* Launcher panel */}
       {unlocked && (
         <div className="launcher-panel" onClick={(e) => e.stopPropagation()}>
-          {/* ── Search bar ───────────────────────────────────────────────────── */}
           <div className="search-wrap">
-            {/* Search icon */}
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.35-4.35" />
@@ -250,7 +266,6 @@ export default function LauncherPage() {
               spellCheck={false}
             />
 
-            {/* Clipboard badge */}
             {clipboardActive && (
               <div className="clipboard-badge">
                 <div className="clipboard-dot" />
@@ -258,24 +273,21 @@ export default function LauncherPage() {
               </div>
             )}
 
-            {!clipboardActive && (
-              <span className="search-hint">ESC</span>
-            )}
+            {!clipboardActive && <span className="search-hint">ESC</span>}
           </div>
 
-          {/* ── Category Bar ─────────────────────────────────────────────────── */}
           {categories.length > 0 && (
             <div className="category-filter-bar">
               <div
-                className={`category-filter-item ${selectedCategoryId === null ? 'active' : ''}`}
+                className={`category-filter-item ${selectedCategoryId === null ? "active" : ""}`}
                 onClick={() => handleCategorySelect(null)}
               >
                 All
               </div>
-              {categories.map(cat => (
+              {categories.map((cat) => (
                 <div
                   key={cat.id}
-                  className={`category-filter-item ${selectedCategoryId === cat.id ? 'active' : ''}`}
+                  className={`category-filter-item ${selectedCategoryId === cat.id ? "active" : ""}`}
                   onClick={() => handleCategorySelect(cat.id)}
                 >
                   <div className="category-dot" style={{ color: cat.color }} />
@@ -285,7 +297,6 @@ export default function LauncherPage() {
             </div>
           )}
 
-          {/* ── Results ──────────────────────────────────────────────────────── */}
           <div className="results-list" ref={listRef}>
             {results.length === 0 ? (
               <div className="results-empty">
@@ -301,51 +312,74 @@ export default function LauncherPage() {
                   key={cred.id}
                   id={`result-item-${cred.id}`}
                   className={`result-item ${index === selectedIndex ? "selected" : ""}`}
-                  onClick={() => handleCopy(cred)}
+                  onClick={() => handleCopyPassword(cred)}
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
-                  {/* Icon badge */}
-                  <div className="result-icon" style={{
-                    background: cred.categoryId ? categories.find(c => c.id === cred.categoryId)?.color + '22' : 'transparent',
-                    color: cred.categoryId ? categories.find(c => c.id === cred.categoryId)?.color : 'inherit'
-                  }}>
+                  <button
+                    type="button"
+                    className={`favorite-btn ${cred.isFavorite ? "active" : ""}`}
+                    title={cred.isFavorite ? "Unpin favorite" : "Pin favorite"}
+                    onClick={(e) => handleToggleFavorite(e, cred)}
+                  >
+                    {cred.isFavorite ? "★" : "☆"}
+                  </button>
+
+                  <div
+                    className="result-icon"
+                    style={{
+                      background: cred.categoryId
+                        ? categories.find((c) => c.id === cred.categoryId)?.color + "22"
+                        : "transparent",
+                      color: cred.categoryId
+                        ? categories.find((c) => c.id === cred.categoryId)?.color
+                        : "inherit",
+                    }}
+                  >
                     {getInitials(cred.keyName)}
                   </div>
 
-                  {/* Info */}
                   <div className="result-info">
                     <div className="result-keyname">{cred.keyName}</div>
                     <div className="result-username">
-                      {cred.username || <span style={{ fontStyle: "italic", opacity: 0.6 }}>No username</span>}
+                      {cred.username || (
+                        <span style={{ fontStyle: "italic", opacity: 0.6 }}>No username</span>
+                      )}
                       {cred.categoryId && (
-                        <span className="credential-category-tag" style={{ marginLeft: 8, padding: '0 4px', fontSize: 9, opacity: 0.7, border: `1px solid currentColor` }}>
-                          {categories.find(c => c.id === cred.categoryId)?.name}
+                        <span
+                          className="credential-category-tag"
+                          style={{
+                            marginLeft: 8,
+                            padding: "0 4px",
+                            fontSize: 9,
+                            opacity: 0.7,
+                            border: "1px solid currentColor",
+                          }}
+                        >
+                          {categories.find((c) => c.id === cred.categoryId)?.name}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Copy hint */}
                   <div className="result-copy-hint">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    Copy
+                    <span className="copy-password-hint">↵ Pass</span>
+                    <span className="copy-user-hint">Ctrl+↵ User</span>
                   </div>
                 </div>
               ))
             )}
           </div>
 
-          {/* ── Footer ───────────────────────────────────────────────────────── */}
           <div className="launcher-footer">
             <div className="footer-hints">
               <div className="footer-hint">
                 <span className="kbd">↑↓</span> Navigate
               </div>
               <div className="footer-hint">
-                <span className="kbd">↵</span> Copy
+                <span className="kbd">↵</span> Password
+              </div>
+              <div className="footer-hint">
+                <span className="kbd">Ctrl+↵</span> Username
               </div>
               <div className="footer-hint">
                 <span className="kbd">Esc</span> Close
@@ -353,17 +387,9 @@ export default function LauncherPage() {
             </div>
 
             <div className="footer-actions">
-              {/* Lock button */}
-              <button
-                id="launcher-lock-btn"
-                className="btn btn-icon"
-                title="Lock vault"
-                onClick={handleLock}
-              >
+              <button id="launcher-lock-btn" className="btn btn-icon" title="Lock vault" onClick={handleLock}>
                 🔒
               </button>
-
-              {/* Open manager */}
               <button
                 id="launcher-manager-btn"
                 className="btn btn-icon"
@@ -377,7 +403,6 @@ export default function LauncherPage() {
         </div>
       )}
 
-      {/* Toast notifications */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

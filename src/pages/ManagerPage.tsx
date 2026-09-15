@@ -5,6 +5,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { ToastContainer } from "../components/Toast";
 import { useToast } from "../hooks/useToast";
+import { useVaultLock } from "../hooks/useVaultLock";
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import {
   searchCredentials,
   addCredential,
@@ -20,6 +23,12 @@ import {
   deleteCategory,
   getLauncherShortcut,
   setLauncherShortcut,
+  toggleFavorite,
+  getIdleTimeout,
+  setIdleTimeout,
+  exportVault,
+  restoreVault,
+  importCsv,
 } from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
 
@@ -83,9 +92,36 @@ export default function ManagerPage() {
   const [launcherShortcut, setLauncherShortcutState] = useState("Ctrl+Shift+Space");
   const [recordingShortcut, setRecordingShortcut] = useState(false);
   const [savingShortcut, setSavingShortcut] = useState(false);
+  const [idleTimeout, setIdleTimeoutState] = useState(15);
+  const [autostartOn, setAutostartOn] = useState(false);
+  const [busyIo, setBusyIo] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { toasts, showToast, removeToast } = useToast();
+
+  const handleAutoLock = useCallback(() => {
+    setUnlocked(false);
+    setCredentials([]);
+    setSelectedId(null);
+    setEditorMode("idle");
+  }, []);
+
+  useVaultLock(handleAutoLock, unlocked);
+
+  async function loadSettings() {
+    try {
+      const [shortcut, idle, auto] = await Promise.all([
+        getLauncherShortcut(),
+        getIdleTimeout(),
+        isAutostartEnabled().catch(() => false),
+      ]);
+      setLauncherShortcutState(shortcut);
+      setIdleTimeoutState(idle);
+      setAutostartOn(auto);
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Check if already unlocked on mount
   useEffect(() => {
@@ -93,7 +129,7 @@ export default function ManagerPage() {
       if (ok) {
         setUnlocked(true);
         loadCategories();
-        getLauncherShortcut().then(setLauncherShortcutState).catch(() => {});
+        loadSettings();
       }
     });
   }, []);
@@ -297,7 +333,7 @@ export default function ManagerPage() {
           onUnlocked={() => {
             setUnlocked(true);
             loadCategories();
-            getLauncherShortcut().then(setLauncherShortcutState).catch(() => {});
+            loadSettings();
           }}
         />
       )}
@@ -318,7 +354,7 @@ export default function ManagerPage() {
               <button className="btn btn-primary" onClick={handleNewCredential}>+ Add Credential</button>
               <button className="btn btn-secondary" onClick={() => {
                 setShowChangePassword(true);
-                getLauncherShortcut().then(setLauncherShortcutState).catch(() => {});
+                loadSettings();
               }}>⚙ Settings</button>
               <button className="btn btn-secondary" onClick={handleLock}>🔒 Lock</button>
             </div>
@@ -352,7 +388,9 @@ export default function ManagerPage() {
                         {getInitials(cred.keyName)}
                     </div>
                     <div className="cred-item-info">
-                      <div className="cred-item-name">{cred.keyName}</div>
+                      <div className="cred-item-name">
+                        {cred.isFavorite ? "★ " : ""}{cred.keyName}
+                      </div>
                       <div className="cred-item-user">{cred.username || "—"}</div>
                       {cred.categoryId && (
                         <div className="credential-category-tag" style={{ border: `1px solid ${categories.find(c => c.id === cred.categoryId)?.color}55`, color: categories.find(c => c.id === cred.categoryId)?.color }}>
@@ -374,6 +412,25 @@ export default function ManagerPage() {
                     <div className="editor-title">
                       {editorMode === "new" ? "New Credential" : form.keyName}
                     </div>
+                    {editorMode === "edit" && selectedId !== null && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          try {
+                            const next = await toggleFavorite(selectedId);
+                            setCredentials((list) =>
+                              list.map((c) => (c.id === selectedId ? { ...c, isFavorite: next } : c))
+                            );
+                            showToast(next ? "Added to favorites" : "Removed from favorites", "success");
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      >
+                        {credentials.find((c) => c.id === selectedId)?.isFavorite ? "★ Favorited" : "☆ Favorite"}
+                      </button>
+                    )}
                   </div>
 
                   <div className="form-group-row">
@@ -467,14 +524,12 @@ export default function ManagerPage() {
 
           {showChangePassword && (
             <div className="modal-overlay">
-              <div className="modal-card" style={{ width: 420 }}>
+              <div className="modal-card settings-modal">
                 <div className="modal-title">Settings</div>
 
                 <div className="settings-section">
                   <div className="settings-section-title">Launcher Shortcut</div>
-                  <p className="settings-hint">
-                    Opens or hides the PasCopyOf launcher from anywhere.
-                  </p>
+                  <p className="settings-hint">Opens or hides the launcher from anywhere.</p>
                   <div className="shortcut-row">
                     <div className={`shortcut-display ${recordingShortcut ? "recording" : ""}`}>
                       {recordingShortcut ? "Press a new shortcut…" : launcherShortcut}
@@ -488,29 +543,153 @@ export default function ManagerPage() {
                       {recordingShortcut ? "Listening…" : "Change"}
                     </button>
                   </div>
-                  {recordingShortcut && (
-                    <p className="settings-hint">Esc to cancel. Include Ctrl / Alt / Shift + a key.</p>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ marginTop: 8, alignSelf: "flex-start" }}
-                    disabled={savingShortcut || launcherShortcut === "Ctrl+Shift+Space"}
-                    onClick={async () => {
-                      setSavingShortcut(true);
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">Auto-Lock</div>
+                  <p className="settings-hint">Lock the vault after inactivity.</p>
+                  <select
+                    className="form-input"
+                    value={idleTimeout}
+                    onChange={async (e) => {
+                      const minutes = Number(e.target.value);
                       try {
-                        await setLauncherShortcut("Ctrl+Shift+Space");
-                        setLauncherShortcutState("Ctrl+Shift+Space");
-                        showToast("✓ Shortcut reset to Ctrl+Shift+Space", "success");
+                        await setIdleTimeout(minutes);
+                        setIdleTimeoutState(minutes);
+                        showToast(
+                          minutes === 0 ? "Auto-lock disabled" : `Auto-lock set to ${minutes} min`,
+                          "success"
+                        );
                       } catch (err) {
                         showToast(String(err), "error");
-                      } finally {
-                        setSavingShortcut(false);
                       }
                     }}
                   >
-                    Reset to Default
-                  </button>
+                    <option value={0}>Never</option>
+                    <option value={1}>1 minute</option>
+                    <option value={5}>5 minutes</option>
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                    <option value={60}>60 minutes</option>
+                  </select>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">Start with Windows</div>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={autostartOn}
+                      onChange={async (e) => {
+                        const next = e.target.checked;
+                        try {
+                          if (next) await enableAutostart();
+                          else await disableAutostart();
+                          setAutostartOn(next);
+                          showToast(next ? "Autostart enabled" : "Autostart disabled", "success");
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        }
+                      }}
+                    />
+                    Launch PasCopyOf when I sign in
+                  </label>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">Backup &amp; Import</div>
+                  <p className="settings-hint">
+                    Backup keeps passwords encrypted. Restore replaces the current vault (same master password required).
+                    CSV import supports KeePass/browser exports (`name,username,password,...`).
+                  </p>
+                  <div className="settings-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busyIo}
+                      onClick={async () => {
+                        const path = await save({
+                          defaultPath: `PasCopyOf-backup-${new Date().toISOString().slice(0, 10)}.pascopyof`,
+                          filters: [{ name: "PasCopyOf Backup", extensions: ["pascopyof"] }],
+                        });
+                        if (!path) return;
+                        setBusyIo(true);
+                        try {
+                          await exportVault(path);
+                          showToast("✓ Backup exported", "success");
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        } finally {
+                          setBusyIo(false);
+                        }
+                      }}
+                    >
+                      Export Backup
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busyIo}
+                      onClick={async () => {
+                        const ok = window.confirm(
+                          "Restore will replace ALL current vault data. Continue?"
+                        );
+                        if (!ok) return;
+                        const path = await open({
+                          multiple: false,
+                          filters: [{ name: "PasCopyOf Backup", extensions: ["pascopyof", "json"] }],
+                        });
+                        if (!path || Array.isArray(path)) return;
+                        setBusyIo(true);
+                        try {
+                          await restoreVault(path);
+                          showToast("Vault restored — unlock with the backup master password", "success");
+                          setShowChangePassword(false);
+                          handleAutoLock();
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        } finally {
+                          setBusyIo(false);
+                        }
+                      }}
+                    >
+                      Restore Backup
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busyIo}
+                      onClick={async () => {
+                        const path = await open({
+                          multiple: false,
+                          filters: [{ name: "CSV", extensions: ["csv"] }],
+                        });
+                        if (!path || Array.isArray(path)) return;
+                        setBusyIo(true);
+                        try {
+                          const result = await importCsv(path);
+                          showToast(
+                            `Imported ${result.imported} · skipped ${result.skipped}`,
+                            "success"
+                          );
+                          await loadCredentials(searchQuery);
+                          await loadCategories();
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        } finally {
+                          setBusyIo(false);
+                        }
+                      }}
+                    >
+                      Import CSV
+                    </button>
+                  </div>
                 </div>
 
                 <div className="settings-divider" />

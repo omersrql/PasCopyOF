@@ -1,10 +1,7 @@
 /**
  * vault.ts — Typed wrappers around all Tauri backend commands.
- * All database/encryption operations run in Rust; we only handle IPC here.
  */
 import { invoke } from "@tauri-apps/api/core";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Category {
   id: number;
@@ -20,6 +17,8 @@ export interface CredentialSafe {
   notes: string;
   categoryId: number | null;
   createdAt: string;
+  isFavorite: boolean;
+  lastUsedAt: string | null;
 }
 
 export interface AddCredentialParams {
@@ -34,42 +33,36 @@ export interface UpdateCredentialParams {
   id: number;
   keyName: string;
   username: string;
-  password: string; // empty string = keep existing
+  password: string;
   notes: string;
   categoryId: number | null;
 }
 
-// ─── Vault lifecycle ──────────────────────────────────────────────────────────
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+}
 
-/** Returns true if the vault has been initialized (salt exists in DB). */
 export async function checkVaultInitialized(): Promise<boolean> {
   return invoke<boolean>("check_vault_initialized");
 }
 
-/** Set up a new vault with a master password. Call only on first run. */
 export async function initVault(masterPassword: string): Promise<void> {
   return invoke<void>("init_vault", { masterPassword });
 }
 
-/**
- * Unlock an existing vault. Returns true if the password was correct.
- * The derived encryption key is stored in Rust memory — never exposed to JS.
- */
 export async function unlockVault(masterPassword: string): Promise<boolean> {
   return invoke<boolean>("unlock_vault", { masterPassword });
 }
 
-/** Lock the vault — clears the in-memory encryption key. */
 export async function lockVault(): Promise<void> {
   return invoke<void>("lock_vault");
 }
 
-/** Returns true if the vault is currently unlocked in memory. */
 export async function isVaultUnlocked(): Promise<boolean> {
   return invoke<boolean>("is_vault_unlocked");
 }
 
-/** Change the master password. Re-encrypts all stored passwords. */
 export async function changeMasterPassword(
   currentPassword: string,
   newPassword: string
@@ -77,73 +70,53 @@ export async function changeMasterPassword(
   return invoke<void>("change_master_password", { currentPassword, newPassword });
 }
 
-// ─── Categories ─────────────────────────────────────────────────────────────
-
-/** Get all categories. */
 export async function getCategories(): Promise<Category[]> {
   return invoke<Category[]>("get_categories");
 }
 
-/** Add a new category. */
 export async function addCategory(name: string, icon: string, color: string): Promise<number> {
   return invoke<number>("add_category", { name, icon, color });
 }
 
-/** Update an existing category. */
 export async function updateCategory(id: number, name: string, icon: string, color: string): Promise<void> {
   return invoke<void>("update_category", { id, name, icon, color });
 }
 
-/** Delete a category. */
 export async function deleteCategory(id: number): Promise<void> {
   return invoke<void>("delete_category", { id });
 }
 
-// ─── Credentials ─────────────────────────────────────────────────────────────
-
-/**
- * Search credentials by key_name (case-insensitive, partial match).
- * Optionally filter by categoryId.
- * Returns safe credentials — passwords are never included.
- */
 export async function searchCredentials(query: string, categoryId: number | null = null): Promise<CredentialSafe[]> {
   return invoke<CredentialSafe[]>("search_credentials", { query, categoryId });
 }
 
-/** Add a new credential. Password is encrypted by Rust before storage. */
 export async function addCredential(params: AddCredentialParams): Promise<number> {
   return invoke<number>("add_credential", params as unknown as Record<string, unknown>);
 }
 
-/** Update an existing credential. If password is empty, the old one is kept. */
 export async function updateCredential(params: UpdateCredentialParams): Promise<void> {
   return invoke<void>("update_credential", params as unknown as Record<string, unknown>);
 }
 
-/** Delete a credential by ID. */
 export async function deleteCredential(id: number): Promise<void> {
   return invoke<void>("delete_credential", { id });
 }
 
-// ─── Clipboard ────────────────────────────────────────────────────────────────
-
-/**
- * Decrypt the password for `id` and copy it to the system clipboard.
- * Clipboard is automatically cleared after 15 seconds (handled in Rust).
- */
 export async function copyPassword(id: number): Promise<void> {
   return invoke<void>("copy_password", { id });
 }
 
-/**
- * Get the decrypted password for a credential.
- * Only used in the manager page for editing.
- */
+export async function copyUsername(id: number): Promise<void> {
+  return invoke<void>("copy_username", { id });
+}
+
+export async function toggleFavorite(id: number): Promise<boolean> {
+  return invoke<boolean>("toggle_favorite", { id });
+}
+
 export async function getDecryptedPassword(id: number): Promise<string> {
   return invoke<string>("get_decrypted_password", { id });
 }
-
-// ─── Window management ────────────────────────────────────────────────────────
 
 export async function showLauncher(): Promise<void> {
   return invoke<void>("show_launcher");
@@ -157,14 +130,34 @@ export async function openManager(): Promise<void> {
   return invoke<void>("open_manager");
 }
 
-// ─── Settings ─────────────────────────────────────────────────────────────────
-
-/** Current global shortcut that toggles the launcher (e.g. "Ctrl+Shift+Space"). */
 export async function getLauncherShortcut(): Promise<string> {
   return invoke<string>("get_launcher_shortcut");
 }
 
-/** Change the global launcher shortcut. Persisted across restarts. */
 export async function setLauncherShortcut(shortcut: string): Promise<void> {
   return invoke<void>("set_launcher_shortcut", { shortcut });
+}
+
+export async function touchActivity(): Promise<void> {
+  return invoke<void>("touch_activity_cmd");
+}
+
+export async function getIdleTimeout(): Promise<number> {
+  return invoke<number>("get_idle_timeout");
+}
+
+export async function setIdleTimeout(minutes: number): Promise<void> {
+  return invoke<void>("set_idle_timeout", { minutes });
+}
+
+export async function exportVault(path: string): Promise<void> {
+  return invoke<void>("export_vault", { path });
+}
+
+export async function restoreVault(path: string): Promise<void> {
+  return invoke<void>("restore_vault", { path });
+}
+
+export async function importCsv(path: string): Promise<ImportResult> {
+  return invoke<ImportResult>("import_csv", { path });
 }

@@ -8,6 +8,8 @@
     "clipboard-manager:default",
     "global-shortcut:default",
     "notification:default",
-    "sql:default"
+    "sql:default",
+    "dialog:default",
+    "autostart:default"
   ]
 }

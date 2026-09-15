@@ -294,13 +294,56 @@ html, body, #root {
   opacity: 0;
   transition: var(--transition-fast);
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.copy-password-hint,
+.copy-user-hint {
+  white-space: nowrap;
+}
+
+.favorite-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+.favorite-btn.active,
+.favorite-btn:hover {
+  color: #f5c542;
 }
 
 .result-item:hover .result-copy-hint,
 .result-item.selected .result-copy-hint {
   opacity: 1;
+}
+
+.settings-modal {
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  cursor: pointer;
 }
 
 /* ── Footer bar ──────────────────────────────────────────────────────────── */
