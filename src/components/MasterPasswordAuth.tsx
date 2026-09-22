@@ -23,10 +23,32 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    checkVaultInitialized().then((initialized) => {
-      setMode(initialized ? "unlock" : "setup");
-      setTimeout(() => inputRef.current?.focus(), 100);
-    });
+    let active = true;
+    checkVaultInitialized()
+      .then((initialized) => {
+        if (!active) return;
+        setMode(initialized ? "unlock" : "setup");
+        setTimeout(() => inputRef.current?.focus(), 50);
+      })
+      .catch((err) => {
+        console.warn("checkVaultInitialized failed, defaulting to unlock:", err);
+        if (!active) return;
+        setMode("unlock");
+        setTimeout(() => inputRef.current?.focus(), 50);
+      });
+
+    // Fallback safeguard: Never stay stuck on loading for more than 500ms
+    const timer = setTimeout(() => {
+      if (active) {
+        setMode((curr) => (curr === "loading" ? "unlock" : curr));
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    }, 500);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

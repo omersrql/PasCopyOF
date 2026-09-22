@@ -193,9 +193,8 @@ fn decrypt(key: &[u8; 32], encoded: &str) -> Result<String> {
 
 // ─── Database ────────────────────────────────────────────────────────────────
 
-fn open_db(path: &PathBuf) -> Result<Connection> {
-    let conn = Connection::open(path)?;
-    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+fn init_db_schema(conn: &Connection) -> Result<()> {
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS meta (
             key   TEXT PRIMARY KEY,
@@ -290,6 +289,13 @@ fn open_db(path: &PathBuf) -> Result<Connection> {
         )?;
     }
 
+    Ok(())
+}
+
+fn open_db(path: &PathBuf) -> Result<Connection> {
+    let conn = Connection::open(path)?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
     Ok(conn)
 }
 
@@ -2365,6 +2371,7 @@ pub fn run() {
             std::fs::create_dir_all(&cache_dir)?;
 
             let conn = open_db(&db_path).expect("Failed to initialize database");
+            init_db_schema(&conn).expect("Failed to initialize database schema");
             let launcher_shortcut = get_meta(&conn, "launcher_shortcut")
                 .unwrap_or_else(|| DEFAULT_LAUNCHER_SHORTCUT.to_string());
             let clipboard_shortcut = get_meta(&conn, "clipboard_shortcut")
@@ -2412,8 +2419,12 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             ensure_windows_notification_identity();
 
-            setup_tray(app)?;
-            register_launcher_hotkey(app.handle(), &launcher_shortcut)?;
+            if let Err(e) = setup_tray(app) {
+                eprintln!("Failed to setup tray: {e}");
+            }
+            if let Err(e) = register_launcher_hotkey(app.handle(), &launcher_shortcut) {
+                eprintln!("Failed to register launcher hotkey: {e}");
+            }
             if let Err(e) = register_clipboard_hotkey(app.handle(), &clipboard_shortcut) {
                 eprintln!("Failed to register clipboard hotkey: {e}");
             }
@@ -2511,3 +2522,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");
 }
+
