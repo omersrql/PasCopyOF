@@ -24,6 +24,7 @@ export interface ClipboardSettings {
   lockWithVault: boolean;
   enabled: boolean;
   previewDelayMs: number;
+  autoPasteOnSelect: boolean;
 }
 
 export type ClipboardFilterType = "all" | "text" | "image" | "files" | "pinned";
@@ -72,13 +73,15 @@ export async function updateClipboardSettings(
   pageSize: number,
   lockWithVault: boolean,
   enabled: boolean,
-  previewDelayMs?: number
+  previewDelayMs?: number,
+  autoPasteOnSelect?: boolean
 ): Promise<void> {
   return invoke<void>("update_clipboard_settings", {
     pageSize,
     lockWithVault,
     enabled,
     previewDelayMs: previewDelayMs ?? 2000,
+    autoPasteOnSelect: autoPasteOnSelect !== undefined ? autoPasteOnSelect : null,
   });
 }
 

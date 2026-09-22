@@ -46,6 +46,7 @@ pub struct AppState {
     pub clipboard_lock_with_vault: bool,
     pub clipboard_enabled: bool,
     pub clipboard_preview_delay_ms: u32,
+    pub auto_paste_on_select: bool,
     pub idle_timeout_minutes: u64, // 0 = disabled
     pub last_activity: Instant,
     pub last_vault_password: Option<String>,
@@ -81,6 +82,7 @@ pub struct ClipboardSettings {
     pub lock_with_vault: bool,
     pub enabled: bool,
     pub preview_delay_ms: u32,
+    pub auto_paste_on_select: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1087,6 +1089,21 @@ async fn copy_password(
         .map_err(|e| e.to_string())?;
     mark_last_used(&conn, id)?;
     schedule_clipboard_clear(&app, &*state);
+
+    let auto_paste = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.auto_paste_on_select
+    };
+    if auto_paste {
+        if let Some(window) = app.get_webview_window("launcher") {
+            let _ = window.hide();
+        }
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            win_paste::simulate_paste();
+        });
+    }
+
     Ok(())
 }
 
@@ -1120,6 +1137,21 @@ async fn copy_username(
         .map_err(|e| e.to_string())?;
     mark_last_used(&conn, id)?;
     schedule_clipboard_clear(&app, &*state);
+
+    let auto_paste = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.auto_paste_on_select
+    };
+    if auto_paste {
+        if let Some(window) = app.get_webview_window("launcher") {
+            let _ = window.hide();
+        }
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            win_paste::simulate_paste();
+        });
+    }
+
     Ok(())
 }
 
@@ -1839,6 +1871,18 @@ async fn copy_from_history(
         let _ = window.hide();
     }
     let _ = app.emit("clipboard-updated", ());
+
+    let auto_paste = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.auto_paste_on_select
+    };
+    if auto_paste {
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            win_paste::simulate_paste();
+        });
+    }
+
     Ok(())
 }
 
@@ -1968,6 +2012,7 @@ async fn get_clipboard_settings(
         lock_with_vault: st.clipboard_lock_with_vault,
         enabled: st.clipboard_enabled,
         preview_delay_ms: st.clipboard_preview_delay_ms,
+        auto_paste_on_select: st.auto_paste_on_select,
     })
 }
 
@@ -1977,6 +2022,7 @@ async fn update_clipboard_settings(
     lock_with_vault: bool,
     enabled: bool,
     preview_delay_ms: Option<u32>,
+    auto_paste_on_select: Option<bool>,
     state: State<'_, SafeAppState>,
 ) -> Result<(), String> {
     let delay = preview_delay_ms.unwrap_or(2000);
@@ -1985,6 +2031,9 @@ async fn update_clipboard_settings(
     st.clipboard_lock_with_vault = lock_with_vault;
     st.clipboard_enabled = enabled;
     st.clipboard_preview_delay_ms = delay;
+    if let Some(auto) = auto_paste_on_select {
+        st.auto_paste_on_select = auto;
+    }
 
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
     set_meta(&conn, "clipboard_page_size", &page_size.to_string()).map_err(|e| e.to_string())?;
@@ -2006,6 +2055,14 @@ async fn update_clipboard_settings(
         &delay.to_string(),
     )
     .map_err(|e| e.to_string())?;
+    if let Some(auto) = auto_paste_on_select {
+        set_meta(
+            &conn,
+            "auto_paste_on_select",
+            if auto { "1" } else { "0" },
+        )
+        .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -2310,6 +2367,41 @@ async fn update_screenshot_settings(
 }
 
 #[cfg(target_os = "windows")]
+mod win_paste {
+    #[link(name = "user32")]
+    extern "system" {
+        fn keybd_event(b_vk: u8, b_scan: u8, dw_flags: u32, dw_extra_info: usize);
+    }
+
+    const VK_CONTROL: u8 = 0x11;
+    const VK_V: u8 = 0x56;
+    const KEYEVENTF_KEYUP: u32 = 0x0002;
+
+    pub fn simulate_paste() {
+        unsafe {
+            keybd_event(VK_CONTROL, 0, 0, 0);
+            keybd_event(VK_V, 0, 0, 0);
+            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod win_paste {
+    pub fn simulate_paste() {}
+}
+
+#[tauri::command]
+async fn trigger_auto_paste() -> Result<(), String> {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        win_paste::simulate_paste();
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
 fn ensure_windows_notification_identity() {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
@@ -2393,6 +2485,9 @@ pub fn run() {
             let clipboard_preview_delay_ms = get_meta(&conn, "clipboard_preview_delay_ms")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(2000);
+            let auto_paste_on_select = get_meta(&conn, "auto_paste_on_select")
+                .map(|v| v != "0")
+                .unwrap_or(true);
             let idle_timeout_minutes = get_meta(&conn, "idle_timeout_minutes")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_IDLE_TIMEOUT_MINUTES);
@@ -2410,6 +2505,7 @@ pub fn run() {
                 clipboard_lock_with_vault,
                 clipboard_enabled,
                 clipboard_preview_delay_ms,
+                auto_paste_on_select,
                 idle_timeout_minutes,
                 last_activity: Instant::now(),
                 last_vault_password: None,
@@ -2518,6 +2614,7 @@ pub fn run() {
             get_app_config,
             set_app_theme,
             set_app_language,
+            trigger_auto_paste,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

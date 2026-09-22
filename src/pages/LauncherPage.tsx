@@ -17,6 +17,7 @@ import {
   isVaultUnlocked,
   getCategories,
 } from "../api/vault";
+import { getClipboardSettings } from "../api/clipboard";
 import type { CredentialSafe, Category } from "../api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useApp } from "../context/AppContext";
@@ -30,6 +31,7 @@ export default function LauncherPage() {
   const [results, setResults] = useState<CredentialSafe[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copying, setCopying] = useState(false);
+  const [autoPasteOnSelect, setAutoPasteOnSelect] = useState(true);
   const [clipboardActive, setClipboardActive] = useState(false);
   const [clipboardCountdown, setClipboardCountdown] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -68,6 +70,20 @@ export default function LauncherPage() {
     }
   };
 
+  const loadClipboardSettings = useCallback(() => {
+    getClipboardSettings()
+      .then((s) => {
+        if (s && typeof s.autoPasteOnSelect === "boolean") {
+          setAutoPasteOnSelect(s.autoPasteOnSelect);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadClipboardSettings();
+  }, [loadClipboardSettings]);
+
   useEffect(() => {
     if (!unlocked) return;
 
@@ -79,13 +95,14 @@ export default function LauncherPage() {
         }, 10);
         doSearch(query, selectedCategoryId);
         loadCategories();
+        loadClipboardSettings();
       }
     });
 
     return () => {
       unlisten.then((fn: () => void) => fn());
     };
-  }, [unlocked, query, selectedCategoryId]);
+  }, [unlocked, query, selectedCategoryId, loadClipboardSettings]);
 
   useEffect(() => {
     if (unlocked) {
@@ -161,11 +178,17 @@ export default function LauncherPage() {
     setCopying(true);
     try {
       await copyPassword(cred.id);
-      showToast(`🔑  "${cred.keyName}" password copied — clears in 15s`, "success");
-      startClipboardCountdown();
-      setTimeout(async () => {
-        await handleClose();
-      }, 600);
+      if (autoPasteOnSelect) {
+        setQuery("");
+        setResults([]);
+        setSelectedIndex(0);
+      } else {
+        showToast(`🔑  "${cred.keyName}" password copied — clears in 15s`, "success");
+        startClipboardCountdown();
+        setTimeout(async () => {
+          await handleClose();
+        }, 600);
+      }
     } catch (err) {
       showToast(`Failed to copy: ${String(err)}`, "error");
     } finally {
@@ -178,11 +201,17 @@ export default function LauncherPage() {
     setCopying(true);
     try {
       await copyUsername(cred.id);
-      showToast(`👤  "${cred.keyName}" username copied — clears in 15s`, "success");
-      startClipboardCountdown();
-      setTimeout(async () => {
-        await handleClose();
-      }, 600);
+      if (autoPasteOnSelect) {
+        setQuery("");
+        setResults([]);
+        setSelectedIndex(0);
+      } else {
+        showToast(`👤  "${cred.keyName}" username copied — clears in 15s`, "success");
+        startClipboardCountdown();
+        setTimeout(async () => {
+          await handleClose();
+        }, 600);
+      }
     } catch (err) {
       showToast(`Failed to copy username: ${String(err)}`, "error");
     } finally {

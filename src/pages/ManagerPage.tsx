@@ -117,6 +117,7 @@ export default function ManagerPage() {
   const [clipboardLockWithVault, setClipboardLockWithVault] = useState(false);
   const [clipboardEnabled, setClipboardEnabled] = useState(true);
   const [clipboardPreviewDelayMs, setClipboardPreviewDelayMs] = useState(2000);
+  const [autoPasteOnSelect, setAutoPasteOnSelect] = useState(true);
 
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
@@ -202,6 +203,7 @@ export default function ManagerPage() {
           lockWithVault: false,
           enabled: true,
           previewDelayMs: 2000,
+          autoPasteOnSelect: true,
         })),
         getScreenshotSettings().catch(() => ({
           shortcut: "Ctrl+Shift+S",
@@ -218,6 +220,7 @@ export default function ManagerPage() {
         setClipboardLockWithVault(clipSettings.lockWithVault);
         setClipboardEnabled(clipSettings.enabled);
         setClipboardPreviewDelayMs(clipSettings.previewDelayMs ?? 2000);
+        setAutoPasteOnSelect(clipSettings.autoPasteOnSelect ?? true);
       }
       if (scSettings) {
         setScreenshotShortcutState(scSettings.shortcut);
@@ -849,7 +852,7 @@ export default function ManagerPage() {
                           const nextLock = e.target.checked;
                           setClipboardLockWithVault(nextLock);
                           try {
-                            await updateClipboardSettings(clipboardPageSize, nextLock, clipboardEnabled, clipboardPreviewDelayMs);
+                            await updateClipboardSettings(clipboardPageSize, nextLock, clipboardEnabled, clipboardPreviewDelayMs, autoPasteOnSelect);
                             showToast(
                               nextLock
                                 ? "Kasa kilitliyken pano geçmişi de kilitlenecek"
@@ -872,7 +875,7 @@ export default function ManagerPage() {
                           const nextEnabled = e.target.checked;
                           setClipboardEnabled(nextEnabled);
                           try {
-                            await updateClipboardSettings(clipboardPageSize, clipboardLockWithVault, nextEnabled, clipboardPreviewDelayMs);
+                            await updateClipboardSettings(clipboardPageSize, clipboardLockWithVault, nextEnabled, clipboardPreviewDelayMs, autoPasteOnSelect);
                             showToast(
                               nextEnabled ? "Pano geçmişi kaydı aktif" : "Pano geçmişi kaydı duraklatıldı",
                               "success"
@@ -884,6 +887,38 @@ export default function ManagerPage() {
                       />
                       Pano geçmişi izleyicisini aktif et
                     </label>
+
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoPasteOnSelect}
+                        onChange={async (e) => {
+                          const nextAuto = e.target.checked;
+                          setAutoPasteOnSelect(nextAuto);
+                          try {
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              nextAuto
+                            );
+                            showToast(
+                              nextAuto
+                                ? (lang === "tr" ? "Otomatik yapıştırma aktif" : "Auto-paste enabled")
+                                : (lang === "tr" ? "Otomatik yapıştırma kapatıldı" : "Auto-paste disabled"),
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      {t("settingsAutoPasteTitle")}
+                    </label>
+                    <p className="settings-hint" style={{ marginTop: 2, marginBottom: 4 }}>
+                      {t("settingsAutoPasteHint")}
+                    </p>
                   </div>
 
                   <button

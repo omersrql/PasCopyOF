@@ -109,6 +109,8 @@ export const translations = {
     settingsClipboardLockWithVaultHint: "Kasa kilitlendiğinde pano geçmişine erişim için ana parola gerekir.",
     settingsClipboardEnabled: "Pano İzleyiciyi Etkinleştir",
     settingsClipboardEnabledHint: "Kapatılırsa yeni kopyalamalar kaydedilmez.",
+    settingsAutoPasteTitle: "Seçilen Öğeyi Otomatik Yapıştır (Auto-Paste)",
+    settingsAutoPasteHint: "Pano geçmişinden veya parola kasasından bir öğe seçildiğinde pencereyi kapatıp imlecin bulunduğu aktif alana otomatik yapıştırır (Ctrl+V).",
 
     settingsScreenshotSectionTitle: "Ekran Görüntüsü & İşaretleme (Snipping Tool)",
     settingsScreenshotSectionHint: "Seçilen ekran alanının ekran görüntüsünü alır, üzerine çizim yapmanızı ve Windows OCR ile metin ayıklamanızı sağlar.",
@@ -294,6 +296,8 @@ export const translations = {
     settingsClipboardLockWithVaultHint: "Requires master password to view clipboard history whenever vault is locked.",
     settingsClipboardEnabled: "Enable Clipboard Listener",
     settingsClipboardEnabledHint: "If disabled, newly copied items will not be captured into history.",
+    settingsAutoPasteTitle: "Auto-Paste on Selection",
+    settingsAutoPasteHint: "When an item is selected from clipboard history or vault launcher, closes the window and automatically pastes (Ctrl+V) into the active text field.",
 
     settingsScreenshotSectionTitle: "Screenshot Capture & Markup Tool",
     settingsScreenshotSectionHint: "Captures screen areas, offers drawing annotations, and extracts text with Windows OCR.",
