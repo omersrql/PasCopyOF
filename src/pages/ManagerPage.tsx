@@ -31,6 +31,22 @@ import {
   importCsv,
 } from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
+import {
+  getClipboardSettings,
+  updateClipboardSettings,
+  setClipboardShortcut,
+  clearClipboardHistory,
+} from "../api/clipboard";
+import {
+  setScreenshotShortcut,
+  triggerScreenshot,
+  getScreenshotSettings,
+  updateScreenshotSettings,
+} from "../api/screenshot";
+import { useApp } from "../context/AppContext";
+import type { AppTheme, AppLanguage } from "../api/config";
+import { checkAppUpdate, downloadAndInstallUpdate, getAppVersion } from "../api/updater";
+import type { UpdateInfo } from "../api/updater";
 
 type EditorMode = "idle" | "new" | "edit";
 
@@ -75,6 +91,7 @@ function shortcutFromEvent(e: KeyboardEvent): string | null {
 }
 
 export default function ManagerPage() {
+  const { theme, setTheme, lang, setLanguage, t } = useApp();
   const [unlocked, setUnlocked] = useState(false);
   const [credentials, setCredentials] = useState<CredentialSafe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,6 +109,27 @@ export default function ManagerPage() {
   const [launcherShortcut, setLauncherShortcutState] = useState("Ctrl+Shift+Space");
   const [recordingShortcut, setRecordingShortcut] = useState(false);
   const [savingShortcut, setSavingShortcut] = useState(false);
+
+  // Clipboard Settings State
+  const [clipboardShortcut, setClipboardShortcutState] = useState("Ctrl+Shift+V");
+  const [recordingClipboardShortcut, setRecordingClipboardShortcut] = useState(false);
+  const [clipboardPageSize, setClipboardPageSize] = useState(100);
+  const [clipboardLockWithVault, setClipboardLockWithVault] = useState(false);
+  const [clipboardEnabled, setClipboardEnabled] = useState(true);
+  const [clipboardPreviewDelayMs, setClipboardPreviewDelayMs] = useState(2000);
+
+  // Screenshot Settings State
+  const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
+  const [screenshotNotificationEnabled, setScreenshotNotificationEnabled] = useState(true);
+  const [recordingScreenshotShortcut, setRecordingScreenshotShortcut] = useState(false);
+
+  // Software Updates State
+  const [appVersion, setAppVersion] = useState("0.2.0");
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
   const [idleTimeout, setIdleTimeoutState] = useState(15);
   const [autostartOn, setAutostartOn] = useState(false);
   const [busyIo, setBusyIo] = useState(false);
@@ -108,16 +146,86 @@ export default function ManagerPage() {
 
   useVaultLock(handleAutoLock, unlocked);
 
+  const handleCheckUpdate = async () => {
+    setUpdateChecking(true);
+    setUpdateError(null);
+    setUpdateInfo(null);
+    setDownloadProgress(null);
+    try {
+      const info = await checkAppUpdate();
+      setUpdateInfo(info);
+      if (!info.available) {
+        showToast(t("settingsUpdaterUpToDate"), "success");
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      setUpdateError(msg);
+      showToast(`${lang === "tr" ? "Güncelleme denetlenemedi" : "Failed to check update"}: ${msg}`, "error");
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!updateInfo?.rawUpdate) return;
+    setUpdateError(null);
+    setDownloadProgress(0);
+    try {
+      await downloadAndInstallUpdate(updateInfo.rawUpdate, (downloaded, total) => {
+        if (total > 0) {
+          setDownloadProgress(Math.round((downloaded / total) * 100));
+        }
+      });
+      showToast(
+        lang === "tr"
+          ? "Güncelleme yüklendi. Uygulama yeniden başlatılıyor..."
+          : "Update installed. Restarting...",
+        "success"
+      );
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      setUpdateError(msg);
+      setDownloadProgress(null);
+      showToast(`${lang === "tr" ? "Güncelleme yüklenemedi" : "Failed to install update"}: ${msg}`, "error");
+    }
+  };
+
   async function loadSettings() {
     try {
-      const [shortcut, idle, auto] = await Promise.all([
+      const [shortcut, idle, auto, clipSettings, scSettings] = await Promise.all([
         getLauncherShortcut(),
         getIdleTimeout(),
         isAutostartEnabled().catch(() => false),
+        getClipboardSettings().catch(() => ({
+          shortcut: "Ctrl+Shift+V",
+          pageSize: 100,
+          lockWithVault: false,
+          enabled: true,
+          previewDelayMs: 2000,
+        })),
+        getScreenshotSettings().catch(() => ({
+          shortcut: "Ctrl+Shift+S",
+          notificationEnabled: true,
+        })),
+        getAppVersion().catch(() => "0.2.0"),
       ]);
       setLauncherShortcutState(shortcut);
       setIdleTimeoutState(idle);
       setAutostartOn(auto);
+      if (clipSettings) {
+        setClipboardShortcutState(clipSettings.shortcut);
+        setClipboardPageSize(clipSettings.pageSize);
+        setClipboardLockWithVault(clipSettings.lockWithVault);
+        setClipboardEnabled(clipSettings.enabled);
+        setClipboardPreviewDelayMs(clipSettings.previewDelayMs ?? 2000);
+      }
+      if (scSettings) {
+        setScreenshotShortcutState(scSettings.shortcut);
+        setScreenshotNotificationEnabled(scSettings.notificationEnabled);
+      }
+      if (arguments[4] || true) {
+        getAppVersion().then(setAppVersion);
+      }
     } catch {
       /* ignore */
     }
@@ -167,6 +275,68 @@ export default function ManagerPage() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingShortcut, showToast]);
+
+  useEffect(() => {
+    if (!recordingClipboardShortcut) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setRecordingClipboardShortcut(false);
+        return;
+      }
+
+      const next = shortcutFromEvent(e);
+      if (!next) return;
+
+      setRecordingClipboardShortcut(false);
+      void (async () => {
+        try {
+          await setClipboardShortcut(next);
+          setClipboardShortcutState(next);
+          showToast(`✓ Pano kısayolu ${next} olarak ayarlandı`, "success");
+        } catch (err) {
+          showToast(String(err), "error");
+        }
+      })();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recordingClipboardShortcut, showToast]);
+
+  useEffect(() => {
+    if (!recordingScreenshotShortcut) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setRecordingScreenshotShortcut(false);
+        return;
+      }
+
+      const next = shortcutFromEvent(e);
+      if (!next) return;
+
+      setRecordingScreenshotShortcut(false);
+      void (async () => {
+        try {
+          await setScreenshotShortcut(next);
+          setScreenshotShortcutState(next);
+          showToast(`✓ Ekran görüntüsü kısayolu ${next} olarak ayarlandı`, "success");
+        } catch (err) {
+          showToast(String(err), "error");
+        }
+      })();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recordingScreenshotShortcut, showToast]);
 
   const loadCategories = async () => {
     try {
@@ -343,20 +513,20 @@ export default function ManagerPage() {
           <div className="manager-topbar">
             <div className="manager-logo">
               <div className="manager-logo-dot" />
-              PasCopyOf Admin
+              {t("topbarAdmin")}
             </div>
             <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-              {credentials.length} credentials
+              {t("topbarCredentialsCount", { count: credentials.length })}
             </span>
 
             <div className="manager-topbar-right">
-              <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>📂 Categories</button>
-              <button className="btn btn-primary" onClick={handleNewCredential}>+ Add Credential</button>
+              <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>{t("topbarCategories")}</button>
+              <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
               <button className="btn btn-secondary" onClick={() => {
                 setShowChangePassword(true);
                 loadSettings();
-              }}>⚙ Settings</button>
-              <button className="btn btn-secondary" onClick={handleLock}>🔒 Lock</button>
+              }}>{t("topbarSettings")}</button>
+              <button className="btn btn-secondary" onClick={handleLock}>{t("topbarLock")}</button>
             </div>
           </div>
 
@@ -367,7 +537,7 @@ export default function ManagerPage() {
                   <input
                     ref={searchInputRef}
                     type="text"
-                    placeholder="Filter credentials…"
+                    placeholder={t("credSearchPlaceholder")}
                     value={searchQuery}
                     onChange={handleSearchChange}
                   />
@@ -435,22 +605,23 @@ export default function ManagerPage() {
 
                   <div className="form-group-row">
                     <div className="form-group">
-                      <label className="form-label">Key Name</label>
+                      <label className="form-label">{t("credKeyName")}</label>
                       <input
                         className="form-input"
+                        placeholder={t("credKeyNamePlaceholder")}
                         value={form.keyName}
                         onChange={(e) => setForm({ ...form, keyName: e.target.value })}
                       />
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Category</label>
+                      <label className="form-label">{t("credCategory")}</label>
                       <select 
                         className="form-input"
                         value={form.categoryId || ""}
                         onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : null })}
                       >
-                        <option value="">No Category</option>
+                        <option value="">{t("credSelectCategory")}</option>
                         {categories.map(cat => (
                           <option key={cat.id} value={cat.id}>{cat.name}</option>
                         ))}
@@ -459,21 +630,22 @@ export default function ManagerPage() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Username</label>
+                    <label className="form-label">{t("credUsername")}</label>
                     <input
                       className="form-input"
+                      placeholder={t("credUsernamePlaceholder")}
                       value={form.username}
                       onChange={(e) => setForm({ ...form, username: e.target.value })}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Password</label>
+                    <label className="form-label">{t("credPassword")}</label>
                     <div className="form-input-wrap">
                       <input
                         type={showPassword ? "text" : "password"}
                         className="form-input"
-                        placeholder={editorMode === "edit" ? "••••••••" : "Enter password…"}
+                        placeholder={editorMode === "edit" ? "••••••••" : t("credPasswordPlaceholder")}
                         value={form.password}
                         onChange={(e) => setForm({ ...form, password: e.target.value })}
                       />
@@ -488,9 +660,10 @@ export default function ManagerPage() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Notes</label>
+                    <label className="form-label">{t("credNotes")}</label>
                     <textarea
                       className="form-textarea"
+                      placeholder={t("credNotesPlaceholder")}
                       value={form.notes}
                       onChange={(e) => setForm({ ...form, notes: e.target.value })}
                     />
@@ -498,10 +671,10 @@ export default function ManagerPage() {
 
                   <div style={{ display: "flex", gap: "10px" }}>
                     <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                      {saving ? "Saving..." : "Save Changes"}
+                      {saving ? t("loading") : t("save")}
                     </button>
                     {editorMode === "edit" && (
-                      <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>Delete</button>
+                      <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>{t("delete")}</button>
                     )}
                   </div>
                 </div>
@@ -525,14 +698,49 @@ export default function ManagerPage() {
           {showChangePassword && (
             <div className="modal-overlay">
               <div className="modal-card settings-modal">
-                <div className="modal-title">Settings</div>
+                <div className="modal-title">{t("settingsTitle")}</div>
+
+                {/* Görünüm & Dil Section */}
+                <div className="settings-section">
+                  <div className="settings-section-title">{t("settingsAppearanceSection")}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label className="settings-label" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
+                        {t("settingsThemeLabel")}
+                      </label>
+                      <select
+                        className="form-input"
+                        value={theme}
+                        onChange={(e) => setTheme(e.target.value as AppTheme)}
+                      >
+                        <option value="dark">{t("settingsThemeDark")}</option>
+                        <option value="light">{t("settingsThemeLight")}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="settings-label" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
+                        {t("settingsLanguageLabel")}
+                      </label>
+                      <select
+                        className="form-input"
+                        value={lang}
+                        onChange={(e) => setLanguage(e.target.value as AppLanguage)}
+                      >
+                        <option value="tr">{t("settingsLanguageTr")}</option>
+                        <option value="en">{t("settingsLanguageEn")}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="settings-divider" />
 
                 <div className="settings-section">
-                  <div className="settings-section-title">Launcher Shortcut</div>
-                  <p className="settings-hint">Opens or hides the launcher from anywhere.</p>
+                  <div className="settings-section-title">{t("settingsLauncherShortcutTitle")}</div>
+                  <p className="settings-hint">{t("settingsLauncherShortcutHint")}</p>
                   <div className="shortcut-row">
                     <div className={`shortcut-display ${recordingShortcut ? "recording" : ""}`}>
-                      {recordingShortcut ? "Press a new shortcut…" : launcherShortcut}
+                      {recordingShortcut ? "..." : launcherShortcut}
                     </div>
                     <button
                       type="button"
@@ -540,8 +748,223 @@ export default function ManagerPage() {
                       disabled={savingShortcut}
                       onClick={() => setRecordingShortcut(true)}
                     >
-                      {recordingShortcut ? "Listening…" : "Change"}
+                      {recordingShortcut ? "..." : t("edit")}
                     </button>
+                  </div>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">{t("settingsClipboardSectionTitle")}</div>
+                  <p className="settings-hint">{t("settingsClipboardSectionHint")}</p>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Pano Geçmişi Kısayolu</div>
+                    <div className="shortcut-row">
+                      <div className={`shortcut-display ${recordingClipboardShortcut ? "recording" : ""}`}>
+                        {recordingClipboardShortcut ? "Yeni kısayola basın…" : clipboardShortcut}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setRecordingClipboardShortcut(true)}
+                      >
+                        {recordingClipboardShortcut ? "Dinleniyor…" : "Değiştir"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Tek Seferde Yüklenecek Kayıt Limiti</div>
+                    <select
+                      className="form-input"
+                      value={clipboardPageSize}
+                      onChange={async (e) => {
+                        const nextSize = Number(e.target.value);
+                        setClipboardPageSize(nextSize);
+                        try {
+                          await updateClipboardSettings(nextSize, clipboardLockWithVault, clipboardEnabled, clipboardPreviewDelayMs);
+                          showToast(`Kayıt limiti ${nextSize} olarak güncellendi`, "success");
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        }
+                      }}
+                    >
+                      <option value={25}>25 Kayıt</option>
+                      <option value={50}>50 Kayıt</option>
+                      <option value={100}>100 Kayıt (Önerilen)</option>
+                      <option value={250}>250 Kayıt</option>
+                      <option value={500}>500 Kayıt</option>
+                      <option value={1000}>1.000 Kayıt</option>
+                      <option value={2500}>2.500 Kayıt</option>
+                      <option value={5000}>5.000 Kayıt (Geniş Arşiv)</option>
+                      <option value={10000}>10.000 Kayıt (Maksimum)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
+                      İçerik Detay Önizleme Gecikmesi (Mercek / Hover)
+                    </div>
+                    <select
+                      className="form-input"
+                      value={clipboardPreviewDelayMs}
+                      onChange={async (e) => {
+                        const nextDelay = Number(e.target.value);
+                        setClipboardPreviewDelayMs(nextDelay);
+                        try {
+                          await updateClipboardSettings(clipboardPageSize, clipboardLockWithVault, clipboardEnabled, nextDelay);
+                          showToast(
+                            nextDelay === 0
+                              ? "Önizleme gecikmesiz (anında) açılacak"
+                              : `Önizleme gecikmesi ${nextDelay / 1000} saniye olarak güncellendi`,
+                            "success"
+                          );
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        }
+                      }}
+                    >
+                      <option value={0}>Hemen Aç (0 saniye - Anında)</option>
+                      <option value={500}>0.5 saniye</option>
+                      <option value={1000}>1 saniye</option>
+                      <option value={1500}>1.5 saniye</option>
+                      <option value={2000}>2 saniye (Varsayılan)</option>
+                      <option value={3000}>3 saniye</option>
+                      <option value={4000}>4 saniye</option>
+                      <option value={5000}>5 saniye</option>
+                    </select>
+                    <p className="settings-hint" style={{ marginTop: 4 }}>
+                      İlk kayıtta belirlenen süre kadar duraklayınca açılır; ardından diğer kayıtlara geçildiğinde anında güncellenir.
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={clipboardLockWithVault}
+                        onChange={async (e) => {
+                          const nextLock = e.target.checked;
+                          setClipboardLockWithVault(nextLock);
+                          try {
+                            await updateClipboardSettings(clipboardPageSize, nextLock, clipboardEnabled, clipboardPreviewDelayMs);
+                            showToast(
+                              nextLock
+                                ? "Kasa kilitliyken pano geçmişi de kilitlenecek"
+                                : "Pano geçmişi kasa kilidinden bağımsız çalışacak",
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      Kasa kilitliyken pano geçmişini de kilitle
+                    </label>
+
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={clipboardEnabled}
+                        onChange={async (e) => {
+                          const nextEnabled = e.target.checked;
+                          setClipboardEnabled(nextEnabled);
+                          try {
+                            await updateClipboardSettings(clipboardPageSize, clipboardLockWithVault, nextEnabled, clipboardPreviewDelayMs);
+                            showToast(
+                              nextEnabled ? "Pano geçmişi kaydı aktif" : "Pano geçmişi kaydı duraklatıldı",
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      Pano geçmişi izleyicisini aktif et
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                    onClick={async () => {
+                      if (window.confirm("Sabitlenmemiş tüm pano geçmişi silinecektir. Emin misiniz?")) {
+                        try {
+                          await clearClipboardHistory();
+                          showToast("Pano geçmişi temizlendi", "success");
+                        } catch (err) {
+                          showToast(String(err), "error");
+                        }
+                      }
+                    }}
+                  >
+                    Tüm Pano Geçmişini Temizle
+                  </button>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">{t("settingsScreenshotSectionTitle")}</div>
+                  <p className="settings-hint">
+                    {t("settingsScreenshotSectionHint")}
+                  </p>
+
+                  <div className="settings-field">
+                    <label className="settings-label">{t("settingsScreenshotShortcut")}</label>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className={`btn ${recordingScreenshotShortcut ? "btn-primary" : "btn-secondary"}`}
+                        onClick={() => setRecordingScreenshotShortcut(true)}
+                      >
+                        {recordingScreenshotShortcut ? "..." : screenshotShortcut}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          try {
+                            await triggerScreenshot();
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      >
+                        {lang === "tr" ? "Şimdi Yakala" : "Capture Now"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={screenshotNotificationEnabled}
+                        onChange={async (e) => {
+                          const next = e.target.checked;
+                          setScreenshotNotificationEnabled(next);
+                          try {
+                            await updateScreenshotSettings(next);
+                            showToast(
+                              next
+                                ? (lang === "tr" ? "Ekran görüntüsü bildirimi aktif" : "Screenshot notification enabled")
+                                : (lang === "tr" ? "Ekran görüntüsü bildirimi kapatıldı" : "Screenshot notification disabled"),
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      {t("settingsScreenshotNotify")}
+                    </label>
+                    <p className="settings-hint" style={{ marginTop: 4 }}>
+                      {t("settingsScreenshotNotifyHint")}
+                    </p>
                   </div>
                 </div>
 
@@ -689,6 +1112,81 @@ export default function ManagerPage() {
                     >
                       Import CSV
                     </button>
+                  </div>
+                </div>
+
+                <div className="settings-divider" />
+
+                {/* Software Updates Section */}
+                <div className="settings-section">
+                  <div className="settings-section-title">{t("settingsUpdaterSectionTitle")}</div>
+                  <p className="settings-hint">{t("settingsUpdaterSectionHint")}</p>
+
+                  <div className="updater-box">
+                    <div className="updater-header-row">
+                      <div>
+                        <span style={{ fontSize: 13, color: "var(--color-text-secondary)", marginRight: 8 }}>
+                          {t("settingsUpdaterCurrentVersion")}:
+                        </span>
+                        <span className="updater-version-tag">
+                          v{appVersion}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={updateChecking || downloadProgress !== null}
+                        onClick={handleCheckUpdate}
+                      >
+                        {updateChecking ? t("settingsUpdaterChecking") : t("settingsUpdaterCheckBtn")}
+                      </button>
+                    </div>
+
+                    {updateInfo && !updateInfo.available && (
+                      <div className="updater-status-uptodate">
+                        {t("settingsUpdaterUpToDate")}
+                      </div>
+                    )}
+
+                    {updateInfo && updateInfo.available && (
+                      <div className="updater-available-card">
+                        <div className="updater-badge-new">
+                          🚀 {t("settingsUpdaterNewVersion").replace("{version}", updateInfo.version || "")}
+                        </div>
+                        {updateInfo.body && (
+                          <div className="updater-notes">
+                            {updateInfo.body}
+                          </div>
+                        )}
+                        {downloadProgress !== null ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="updater-progress-track">
+                              <div
+                                className="updater-progress-fill"
+                                style={{ width: `${downloadProgress}%` }}
+                              />
+                            </div>
+                            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", textAlign: "right" }}>
+                              {t("settingsUpdaterDownloading").replace("{percent}", String(downloadProgress))}
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={handleInstallUpdate}
+                          >
+                            {t("settingsUpdaterInstallBtn")}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {updateError && (
+                      <div style={{ fontSize: 12, color: "var(--color-danger)", marginTop: 4 }}>
+                        ⚠️ {updateError}
+                      </div>
+                    )}
                   </div>
                 </div>
 

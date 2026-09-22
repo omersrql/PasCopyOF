@@ -19,10 +19,12 @@ import {
 } from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useApp } from "../context/AppContext";
 
 const SEARCH_DEBOUNCE = 80;
 
 export default function LauncherPage() {
+  const { t } = useApp();
   const [unlocked, setUnlocked] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CredentialSafe[]>([]);
@@ -258,7 +260,7 @@ export default function LauncherPage() {
               id="launcher-search-input"
               type="text"
               className="search-input"
-              placeholder="Search credentials…"
+              placeholder={t("launcherSearchPlaceholder")}
               value={query}
               onChange={handleQueryChange}
               onKeyDown={handleKeyDown}
@@ -282,7 +284,7 @@ export default function LauncherPage() {
                 className={`category-filter-item ${selectedCategoryId === null ? "active" : ""}`}
                 onClick={() => handleCategorySelect(null)}
               >
-                All
+                {t("all")}
               </div>
               {categories.map((cat) => (
                 <div

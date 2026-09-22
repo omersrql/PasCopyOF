@@ -7,12 +7,14 @@
  */
 import React, { useState, useRef, useEffect } from "react";
 import { checkVaultInitialized, initVault, unlockVault } from "../api/vault";
+import { useApp } from "../context/AppContext";
 
 interface Props {
   onUnlocked: () => void;
 }
 
 export function MasterPasswordAuth({ onUnlocked }: Props) {
+  const { t } = useApp();
   const [mode, setMode] = useState<"loading" | "setup" | "unlock">("loading");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -33,11 +35,11 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
 
     if (mode === "setup") {
       if (password.length < 8) {
-        setError("Master password must be at least 8 characters.");
+        setError(t("authMinCharsError"));
         return;
       }
       if (password !== confirm) {
-        setError("Passwords do not match.");
+        setError(t("authMismatchError"));
         return;
       }
       setLoading(true);
@@ -56,7 +58,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
         if (ok) {
           onUnlocked();
         } else {
-          setError("Incorrect master password.");
+          setError(t("authIncorrectError"));
           setPassword("");
           inputRef.current?.focus();
         }
@@ -83,9 +85,9 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
         <div className="auth-logo">
           <div className="auth-logo-icon">🔐</div>
           <div>
-            <div className="auth-title">PasCopyOf</div>
+            <div className="auth-title">{t("authTitle")}</div>
             <div className="auth-subtitle">
-              {mode === "setup" ? "Set up your vault" : "Enter master password"}
+              {mode === "setup" ? t("authSubtitleSetup") : t("authSubtitleUnlock")}
             </div>
           </div>
         </div>
@@ -94,14 +96,14 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
           {/* Password field */}
           <div className="form-group">
             <label className="form-label">
-              {mode === "setup" ? "Create master password" : "Master password"}
+              {mode === "setup" ? t("authCreatePassword") : t("authMasterPassword")}
             </label>
             <input
               ref={inputRef}
               id="master-password-input"
               type="password"
               className={`form-input ${error ? "error" : ""}`}
-              placeholder={mode === "setup" ? "Min. 8 characters" : "Enter password…"}
+              placeholder={mode === "setup" ? t("authPasswordPlaceholder") : t("authPasswordPlaceholder")}
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(""); }}
               autoComplete="current-password"
@@ -112,12 +114,12 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
           {/* Confirm field (setup only) */}
           {mode === "setup" && (
             <div className="form-group">
-              <label className="form-label">Confirm password</label>
+              <label className="form-label">{t("authConfirmPassword")}</label>
               <input
                 id="confirm-password-input"
                 type="password"
                 className={`form-input ${error ? "error" : ""}`}
-                placeholder="Repeat password…"
+                placeholder={t("authConfirmPlaceholder")}
                 value={confirm}
                 onChange={(e) => { setConfirm(e.target.value); setError(""); }}
                 autoComplete="new-password"
@@ -138,9 +140,9 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
             id="auth-submit-btn"
             type="submit"
             className="btn btn-primary btn-full"
-            disabled={loading || !password}
+            disabled={loading}
           >
-            {loading ? <span className="spinner" /> : mode === "setup" ? "🔒  Create Vault" : "🔓  Unlock Vault"}
+            {loading ? t("loading") : mode === "setup" ? t("authSubmitSetup") : t("authSubmitUnlock")}
           </button>
         </form>
 

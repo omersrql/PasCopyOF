@@ -1,85 +1,137 @@
 # PasCopyOf
 
-Fast and Secure Password Copy Tool. A lightweight, cross-platform password vault and clipboard launcher designed for system administrators.
+Fast, Secure & Modern Password Vault, Smart Clipboard Manager, and Screenshot Annotation Tool designed for system administrators, developers, and power users.
 
-## Features
+---
 
--   **Spotlight-style Launcher**: Minimal search window for instant credential lookup and copy.
--   **Configurable Global Shortcut**: Default `Ctrl + Shift + Space`. Change it from **Manager → Settings**.
--   **System Tray**: Right-click for **Show Launcher**, **Open Manager**, and **Quit PasCopyOf**.
--   **Auto-Lock**: Idle timeout (default 15 minutes, configurable or disabled) locks the vault automatically.
--   **Favorites & Recent**: Pin favorites; recently copied credentials rise to the top of search results.
--   **Username + Password Copy**: `Enter` copies password, `Ctrl+Enter` copies username (clipboard clears after 15s).
--   **Backup / Restore**: Export an encrypted `.pascopyof` backup; restore replaces the vault safely.
--   **CSV Import**: Import from KeePass / browser CSV exports (`name`, `username`, `password`, optional `notes` / `category` / `url`).
--   **Autostart**: Optionally launch with Windows sign-in.
--   **Category Management**: Organize credentials (DB, VPN, RDP, Cloud, etc.) with custom icons and colors.
--   **Security First**:
-    -   Master password protection (no hardcoded backdoor override).
-    -   **Argon2id** key derivation.
-    -   **AES-256-GCM** encryption for all stored credentials.
-    -   Local **SQLite** database outside the install folder.
--   **Management UI**: Add / edit / delete credentials, manage categories, change master password and all settings.
+## ⚡ Key Highlights & Core Features
 
-## Technical Stack
+### 🔐 1. Password Vault & Credential Launcher
+- **Spotlight-Style Launcher (`Ctrl + Shift + Space`)**: Minimal, ultra-fast search window for instant credential lookup.
+- **Quick Copy**: `Enter` copies password, `Ctrl + Enter` copies username (clipboard clears automatically after 15s).
+- **Favorites & Recent Access**: Star frequently used credentials; recently used accounts rise dynamically to the top of results.
+- **Category Organization**: Categorize accounts (Databases, Servers, VPN, Cloud, etc.) with custom colors and icons.
+- **Auto-Lock Security**: Automatic vault lock on idle timeout (1 min, 5 min, 15 min, 30 min, 60 min, or disabled).
+- **Import & Backup**: Encrypted `.pascopyof` backup/restore and universal CSV import (KeePass, Bitwarden, browsers).
 
--   **Frontend**: React + TypeScript + Vite
--   **Backend**: Rust (Tauri v2)
--   **Database**: SQLite (via `rusqlite`)
--   **Encryption**: `aes-gcm` and `argon2` crates
+### 📋 2. Smart Clipboard History (`Ctrl + Shift + V`)
+- **Cursor-Adjacent Floating Launcher**: Always opens precisely next to your mouse cursor across any monitor (Win32 cursor coordinate calculation).
+- **Multi-Format History Tracking**:
+  - 📝 **Text**: Instant character counts and clean previews.
+  - 🖼️ **Images**: Automatically cached to local storage and rendered with high-res thumbnails.
+  - 📁 **Files (`CF_HDROP`)**: Track single or batch copied files with item counts.
+- **Vault Exemption Shield**: Passwords copied from your PasCopyOf Vault are automatically excluded from the clipboard history for maximum security.
+- **Rolling FIFO Pruning**: Automatic garbage collection that limits history to your configured page size (up to 10,000 items: 25, 50, 100, 250, 500, 1,000, 2,500, 5,000, 10,000) and cleans up unpinned cached images.
+- **Live Search & Type Filters**: Instant search by text or file name; filter by *All*, *Text*, *Images*, *Files*, and *Pinned*.
+- **🔍 Smart Hover Detail Preview (Configurable 0s - 5s Delay)**:
+  - Hovering or navigating over an item waits for the configured delay (default 2s, or configurable from 0 to 5 seconds in Settings) to open a floating detail card to the right.
+  - **Active Preview Session**: Once the preview is open, moving across subsequent items updates the preview *instantly* without additional delay.
+  - Displays full scrollable text content, character/word/line count statistics, high-res image previews, or complete file paths.
+- **Vault Lock Sync**: Optional setting to lock clipboard history whenever the password vault is locked.
 
-## Data Location
+### 📸 3. Screenshot Capture & Markup Tool (`Ctrl + Shift + S`)
+- **Cursor-Aware Multi-Monitor Capture**: Automatically detects the monitor containing the mouse cursor using `xcap` and captures it instantly.
+- **Default Area Selection (Snipping Mode)**:
+  - Screen dims automatically on trigger with crosshair cursor.
+  - Drag and drop to select any rectangular region with live pixel dimensions (`W × H`).
+  - Double-click anywhere or click **"Tüm Ekran"** (`Ctrl + A`) to capture the entire screen.
+- **🔍 Magnifier & Live Color Loupe**:
+  - Live 6x zoomed lens follows cursor during crop mode for pixel-perfect edge selection.
+  - Real-time HEX & RGB color readout (`#38BDF8`) with click-to-copy color code.
+- **📐 8-Point Selection Handles & Move**:
+  - 8 directional resize handles (`nw`, `n`, `ne`, `e`, `se`, `s`, `sw`, `w`) to fine-tune your crop area after drawing.
+  - Drag inside the crop rectangle to reposition it anywhere on the screen.
+- **📝 Offline Windows WinRT OCR (Text Extractor)**:
+  - Extract text directly from any selected screen area using Windows native offline OCR engine (`Windows.Media.Ocr`).
+  - No external downloads or heavy AI dependencies. Fast, offline, with full Turkish language support.
+  - Extracted text is instantly copied to clipboard, followed by an editable inspect modal.
+- **🖼️ Mockup & Presentation Mode (`M`)**:
+  - One-click toggle in toolbar wraps your screenshot in a modern gradient presentation card with rounded corners (`14px`) and deep drop shadows.
+- **Rich Annotation & Markup Toolbar**:
+  - ✏️ **Pen (`P`)**: Smooth freehand drawing.
+  - 🖌️ **Highlighter (`H`)**: Semi-transparent broad brush for highlighting code or text.
+  - ↗️ **Arrow (`A`)**: Sharp pointing arrows from start to end.
+  - 🔲 **Rectangle (`R`)**: Clean bounding boxes for UI components.
+  - 🔤 **Text Tool (`T`)**: Click anywhere to place inline text labels with contrast background badges.
+  - 🌫️ **Mosaic / Blur (`B`)**: Instant pixelation to censor passwords, credit card numbers, or sensitive data.
+  - 🔢 **Step Counter Badges (`S`)**: Sequentially numbered badges (①, ②, ③...) for tutorials and bug reports.
+  - 🎨 **Palette & Stroke Sizes**: 7 vibrant colors and 3 stroke widths.
+  - ↩️ **Undo (`Ctrl + Z`) & Clear**: Revert mistakes on the fly.
+- **One-Click Export & System Notifications**:
+  - **Copy to Clipboard (`Ctrl + C` / `Enter`)**: Copies cropped/annotated image to clipboard, registers it into the **Clipboard History**, and optionally sends an OS notification with proper **PasCopyOf** identity (can be toggled on/off in Settings).
+  - **Save to Disk (`Ctrl + S`)**: Native Windows file save dialog for saving PNG images.
+  - **Close (`Esc`)**: First `Esc` resets crop selection, second `Esc` exits overlay.
 
-Vault data lives in the OS app-data directory (not the install folder), so upgrades keep your credentials:
+### 🎨 4. Themes & 🌐 Bilingual Support (TR / EN)
+- **🌓 Dark & Light Themes**:
+  - **Dark Mode**: Sleek obsidian and slate palette (`#0d0d12` / `#0f172a`), neon accents, glassmorphic translucency.
+  - **Light Mode**: Crisp, high-contrast Slate-50 background (`#f8fafc`), clean white cards, indigo accents, and custom SVG controls.
+  - **Instant Cross-Window Synchronization**: Switching themes in Settings emits a global Tauri event, updating all floating launchers and background windows instantly without restart.
+- **🌐 Turkish & English Localization**:
+  - Native bilingual support for Turkish (🇹🇷 Türkçe) and English (🇬🇧 English).
+  - Configurable directly from **Yönetici / Manager -> Ayarlar / Settings -> Görünüm & Dil / Appearance & Language**.
+  - Persisted in SQLite `meta` and mirrored across all active and secondary windows.
 
--   **Windows**: `%APPDATA%\com.pascopyof.vault\vault.db`
--   **Linux**: `~/.local/share/com.pascopyof.vault/vault.db` (typical)
--   **macOS**: `~/Library/Application Support/com.pascopyof.vault/vault.db` (typical)
+---
 
-When uninstalling on Windows, do **not** delete application data if you want to keep the vault.
+## ⌨️ Default Global Shortcuts
 
-## Development
+| Action | Default Shortcut | Configurable |
+|---|---|---|
+| **Vault Quick Launcher** | `Ctrl + Shift + Space` | ✅ Yes (Manager → Settings) |
+| **Clipboard History** | `Ctrl + Shift + V` | ✅ Yes (Manager → Settings) |
+| **Screenshot & Markup** | `Ctrl + Shift + S` | ✅ Yes (Manager → Settings) |
+
+*All shortcuts can be remapped directly in the application by pressing your desired key combination.*
+
+---
+
+## 🔒 Security Architecture
+
+1. **Master Password Protection**: No hardcoded backdoors.
+2. **Argon2id Key Derivation**: High-memory, GPU-resistant key derivation with a random 32-byte salt.
+3. **AES-256-GCM Encryption**: Authenticated encryption for all credentials stored in SQLite.
+4. **Zero-Trust Memory Clearing**: Decryption occurs on-demand; encryption keys are zeroed on auto-lock.
+5. **Isolated AppData Storage**: Database and clipboard cache are kept in secure user data directories outside the install folder.
+
+---
+
+## 🛠️ Technical Stack
+
+- **Frontend**: React 19, TypeScript, Vite, Vanilla CSS (Glassmorphism & Dark Mode)
+- **Desktop Runtime**: [Tauri v2](https://v2.tauri.app/)
+- **Native Screen Capture**: `xcap` crate + `image`
+- **Clipboard Engine**: `clipboard-rs` + Win32 User32 APIs
+- **Database**: SQLite (via `rusqlite` bundled)
+- **Cryptography**: `aes-gcm`, `argon2`, `rand`
+
+---
+
+## 📁 Data Locations
+
+- **Windows**: `%APPDATA%\com.pascopyof.vault\`
+  - `vault.db`: Encrypted credentials, categories, settings, and clipboard database.
+  - `clipboard_cache/`: Cached image clips from clipboard and screenshots.
+- **Linux**: `~/.local/share/com.pascopyof.vault/`
+- **macOS**: `~/Library/Application Support/com.pascopyof.vault/`
+
+---
+
+## 💻 Development & Build
 
 ### Prerequisites
+- [Node.js](https://nodejs.org/) (LTS)
+- [Rust & Cargo](https://rustup.rs/)
+- Windows C++ Build Tools (or equivalent build essentials for Linux/macOS)
 
-1.  **Node.js**: [LTS version](https://nodejs.org/)
-2.  **Rust**: [rustup.rs](https://rustup.rs/)
-3.  **OS Specific Dependencies**:
-    -   **Windows**: [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-    -   **Linux**: `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
-    -   **macOS**: Xcode or Command Line Tools
-
-### Setup & Run
-
+### Run in Development
 ```powershell
 npm install
 npm run tauri dev
 ```
 
-## Build Instructions
-
-### Windows
-
+### Build Production Binary
 ```powershell
 npm run tauri build
 ```
-
-Produces:
-
--   NSIS setup: `src-tauri/target/release/bundle/nsis/PasCopyOf_*_x64-setup.exe`
--   MSI: `src-tauri/target/release/bundle/msi/PasCopyOf_*_x64_en-US.msi`
-
-### Linux / macOS
-
-```bash
-npm run tauri build
-```
-
-## Security Model
-
-1. On first run, the user sets a **Master Password**.
-2. A random 32-byte salt is stored in SQLite.
-3. **Argon2id** derives a 256-bit encryption key (kept only in memory while unlocked).
-4. Credentials are encrypted with **AES-256-GCM**; decryption happens only on Copy.
-5. Idle auto-lock clears the in-memory key.
-6. Backups store already-encrypted blobs + salt; restore requires the original master password.
+Outputs installer packages (NSIS setup & MSI) under `src-tauri/target/release/bundle/`.
