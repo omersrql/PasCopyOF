@@ -16,6 +16,7 @@ import {
   lockVault,
   isVaultUnlocked,
   getCategories,
+  getClipboardClearSeconds,
 } from "../api/vault";
 import { getClipboardSettings } from "../api/clipboard";
 import type { CredentialSafe, Category } from "../api/vault";
@@ -32,6 +33,7 @@ export default function LauncherPage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copying, setCopying] = useState(false);
   const [autoPasteOnSelect, setAutoPasteOnSelect] = useState(true);
+  const [clipboardClearSeconds, setClipboardClearSeconds] = useState(15);
   const [clipboardActive, setClipboardActive] = useState(false);
   const [clipboardCountdown, setClipboardCountdown] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -75,6 +77,13 @@ export default function LauncherPage() {
       .then((s) => {
         if (s && typeof s.autoPasteOnSelect === "boolean") {
           setAutoPasteOnSelect(s.autoPasteOnSelect);
+        }
+      })
+      .catch(() => {});
+    getClipboardClearSeconds()
+      .then((secs) => {
+        if (typeof secs === "number") {
+          setClipboardClearSeconds(secs);
         }
       })
       .catch(() => {});
@@ -183,8 +192,14 @@ export default function LauncherPage() {
         setResults([]);
         setSelectedIndex(0);
       } else {
-        showToast(`🔑  "${cred.keyName}" password copied — clears in 15s`, "success");
-        startClipboardCountdown();
+        const msg =
+          clipboardClearSeconds > 0
+            ? `🔑  "${cred.keyName}" password copied — clears in ${clipboardClearSeconds}s`
+            : `🔑  "${cred.keyName}" password copied`;
+        showToast(msg, "success");
+        if (clipboardClearSeconds > 0) {
+          startClipboardCountdown();
+        }
         setTimeout(async () => {
           await handleClose();
         }, 600);
@@ -206,8 +221,14 @@ export default function LauncherPage() {
         setResults([]);
         setSelectedIndex(0);
       } else {
-        showToast(`👤  "${cred.keyName}" username copied — clears in 15s`, "success");
-        startClipboardCountdown();
+        const msg =
+          clipboardClearSeconds > 0
+            ? `👤  "${cred.keyName}" username copied — clears in ${clipboardClearSeconds}s`
+            : `👤  "${cred.keyName}" username copied`;
+        showToast(msg, "success");
+        if (clipboardClearSeconds > 0) {
+          startClipboardCountdown();
+        }
         setTimeout(async () => {
           await handleClose();
         }, 600);
@@ -234,8 +255,12 @@ export default function LauncherPage() {
 
   function startClipboardCountdown() {
     if (countdownRef.current) clearInterval(countdownRef.current);
+    if (clipboardClearSeconds <= 0) {
+      setClipboardActive(false);
+      return;
+    }
     setClipboardActive(true);
-    setClipboardCountdown(15);
+    setClipboardCountdown(clipboardClearSeconds);
     countdownRef.current = setInterval(() => {
       setClipboardCountdown((c) => {
         if (c <= 1) {

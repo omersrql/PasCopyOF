@@ -150,6 +150,14 @@ export async function setIdleTimeout(minutes: number): Promise<void> {
   return invoke<void>("set_idle_timeout", { minutes });
 }
 
+export async function getClipboardClearSeconds(): Promise<number> {
+  return invoke<number>("get_clipboard_clear_seconds");
+}
+
+export async function setClipboardClearSeconds(seconds: number): Promise<void> {
+  return invoke<void>("set_clipboard_clear_seconds", { seconds });
+}
+
 export async function exportVault(path: string): Promise<void> {
   return invoke<void>("export_vault", { path });
 }

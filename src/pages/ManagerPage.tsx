@@ -26,6 +26,8 @@ import {
   toggleFavorite,
   getIdleTimeout,
   setIdleTimeout,
+  getClipboardClearSeconds,
+  setClipboardClearSeconds,
   exportVault,
   restoreVault,
   importCsv,
@@ -132,6 +134,7 @@ export default function ManagerPage() {
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const [idleTimeout, setIdleTimeoutState] = useState(15);
+  const [clipboardClearSeconds, setClipboardClearSecondsState] = useState(15);
   const [autostartOn, setAutostartOn] = useState(false);
   const [busyIo, setBusyIo] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -193,7 +196,7 @@ export default function ManagerPage() {
 
   async function loadSettings() {
     try {
-      const [shortcut, idle, auto, clipSettings, scSettings] = await Promise.all([
+      const [shortcut, idle, auto, clipSettings, scSettings, clearSecs] = await Promise.all([
         getLauncherShortcut(),
         getIdleTimeout(),
         isAutostartEnabled().catch(() => false),
@@ -209,10 +212,12 @@ export default function ManagerPage() {
           shortcut: "Ctrl+Shift+S",
           notificationEnabled: true,
         })),
+        getClipboardClearSeconds().catch(() => 15),
         getAppVersion().catch(() => "0.2.0"),
       ]);
       setLauncherShortcutState(shortcut);
       setIdleTimeoutState(idle);
+      setClipboardClearSecondsState(clearSecs);
       setAutostartOn(auto);
       if (clipSettings) {
         setClipboardShortcutState(clipSettings.shortcut);
@@ -1006,8 +1011,8 @@ export default function ManagerPage() {
                 <div className="settings-divider" />
 
                 <div className="settings-section">
-                  <div className="settings-section-title">Auto-Lock</div>
-                  <p className="settings-hint">Lock the vault after inactivity.</p>
+                  <div className="settings-section-title">{t("settingsAutoLockTitle")}</div>
+                  <p className="settings-hint">{t("settingsAutoLockHint")}</p>
                   <select
                     className="form-input"
                     value={idleTimeout}
@@ -1017,7 +1022,9 @@ export default function ManagerPage() {
                         await setIdleTimeout(minutes);
                         setIdleTimeoutState(minutes);
                         showToast(
-                          minutes === 0 ? "Auto-lock disabled" : `Auto-lock set to ${minutes} min`,
+                          minutes === 0
+                            ? (lang === "tr" ? "Otomatik kilitleme devre dışı" : "Auto-lock disabled")
+                            : (lang === "tr" ? `Otomatik kilitleme: ${minutes} dakika` : `Auto-lock set to ${minutes} min`),
                           "success"
                         );
                       } catch (err) {
@@ -1025,12 +1032,46 @@ export default function ManagerPage() {
                       }
                     }}
                   >
-                    <option value={0}>Never</option>
-                    <option value={1}>1 minute</option>
-                    <option value={5}>5 minutes</option>
-                    <option value={15}>15 minutes</option>
-                    <option value={30}>30 minutes</option>
-                    <option value={60}>60 minutes</option>
+                    <option value={0}>{lang === "tr" ? "Devre Dışı (Kapatılmaz)" : "Never"}</option>
+                    <option value={1}>1 {lang === "tr" ? "dakika" : "minute"}</option>
+                    <option value={5}>5 {lang === "tr" ? "dakika" : "minutes"}</option>
+                    <option value={15}>15 {lang === "tr" ? "dakika" : "minutes"}</option>
+                    <option value={30}>30 {lang === "tr" ? "dakika" : "minutes"}</option>
+                    <option value={60}>60 {lang === "tr" ? "dakika" : "minutes"}</option>
+                  </select>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">{t("settingsClipboardClearTitle")}</div>
+                  <p className="settings-hint">{t("settingsClipboardClearHint")}</p>
+                  <select
+                    className="form-input"
+                    value={clipboardClearSeconds}
+                    onChange={async (e) => {
+                      const secs = Number(e.target.value);
+                      try {
+                        await setClipboardClearSeconds(secs);
+                        setClipboardClearSecondsState(secs);
+                        showToast(
+                          secs === 0
+                            ? (lang === "tr" ? "Parola panodan otomatik silinmeyecek" : "Password won't be cleared automatically")
+                            : (lang === "tr" ? `Parola panoda ${secs} saniye tutulacak` : `Password clipboard cleared after ${secs}s`),
+                          "success"
+                        );
+                      } catch (err) {
+                        showToast(String(err), "error");
+                      }
+                    }}
+                  >
+                    <option value={5}>5 {lang === "tr" ? "saniye" : "seconds"}</option>
+                    <option value={10}>10 {lang === "tr" ? "saniye" : "seconds"}</option>
+                    <option value={15}>15 {lang === "tr" ? "saniye (Varsayılan)" : "seconds (Default)"}</option>
+                    <option value={30}>30 {lang === "tr" ? "saniye" : "seconds"}</option>
+                    <option value={60}>60 {lang === "tr" ? "saniye (1 dakika)" : "seconds (1 minute)"}</option>
+                    <option value={120}>120 {lang === "tr" ? "saniye (2 dakika)" : "seconds (2 minutes)"}</option>
+                    <option value={0}>{lang === "tr" ? "Asla Temizleme (Devre Dışı)" : "Never Clear (Disabled)"}</option>
                   </select>
                 </div>
 

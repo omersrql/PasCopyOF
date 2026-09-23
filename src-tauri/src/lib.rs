@@ -47,6 +47,7 @@ pub struct AppState {
     pub clipboard_enabled: bool,
     pub clipboard_preview_delay_ms: u32,
     pub auto_paste_on_select: bool,
+    pub clipboard_clear_seconds: u64, // 0 = disabled (never clear)
     pub idle_timeout_minutes: u64, // 0 = disabled
     pub last_activity: Instant,
     pub last_vault_password: Option<String>,
@@ -363,9 +364,13 @@ fn schedule_clipboard_clear(app: &AppHandle, state: &SafeAppState) {
     if let Some(handle) = st.clipboard_clear_handle.take() {
         handle.abort();
     }
+    let secs = st.clipboard_clear_seconds;
+    if secs == 0 {
+        return;
+    }
     let app_clone = app.clone();
     st.clipboard_clear_handle = Some(tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(15)).await;
+        tokio::time::sleep(Duration::from_secs(secs)).await;
         let _ = app_clone.clipboard().write_text("".to_string());
     }));
 }
@@ -995,6 +1000,27 @@ async fn set_idle_timeout(minutes: u64, state: State<'_, SafeAppState>) -> Resul
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
     set_meta(&conn, "idle_timeout_minutes", &minutes.to_string()).map_err(|e| e.to_string())?;
     st.idle_timeout_minutes = minutes;
+    touch_activity(&mut st);
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_clipboard_clear_seconds(state: State<'_, SafeAppState>) -> Result<u64, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.clipboard_clear_seconds)
+}
+
+#[tauri::command]
+async fn set_clipboard_clear_seconds(seconds: u64, state: State<'_, SafeAppState>) -> Result<(), String> {
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "clipboard_clear_seconds", &seconds.to_string()).map_err(|e| e.to_string())?;
+    st.clipboard_clear_seconds = seconds;
+    if seconds == 0 {
+        if let Some(handle) = st.clipboard_clear_handle.take() {
+            handle.abort();
+        }
+    }
     touch_activity(&mut st);
     Ok(())
 }
@@ -2488,6 +2514,9 @@ pub fn run() {
             let auto_paste_on_select = get_meta(&conn, "auto_paste_on_select")
                 .map(|v| v != "0")
                 .unwrap_or(true);
+            let clipboard_clear_seconds = get_meta(&conn, "clipboard_clear_seconds")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(15);
             let idle_timeout_minutes = get_meta(&conn, "idle_timeout_minutes")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_IDLE_TIMEOUT_MINUTES);
@@ -2506,6 +2535,7 @@ pub fn run() {
                 clipboard_enabled,
                 clipboard_preview_delay_ms,
                 auto_paste_on_select,
+                clipboard_clear_seconds,
                 idle_timeout_minutes,
                 last_activity: Instant::now(),
                 last_vault_password: None,
@@ -2585,6 +2615,8 @@ pub fn run() {
             touch_activity_cmd,
             get_idle_timeout,
             set_idle_timeout,
+            get_clipboard_clear_seconds,
+            set_clipboard_clear_seconds,
             export_vault,
             restore_vault,
             import_csv,

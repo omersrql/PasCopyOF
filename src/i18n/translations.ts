@@ -123,6 +123,11 @@ export const translations = {
     settingsAutoLockDisabled: "Devre Dışı (Kapatılmaz)",
     settingsAutoLockMinutes: "{min} Dakika",
 
+    settingsClipboardClearTitle: "Parola Pano Temizleme Süresi",
+    settingsClipboardClearHint: "Kopyalanan parolanın panoda kaç saniye tutulacağını belirler. Süre bitiminde pano otomatik temizlenir.",
+    settingsClipboardClearDisabled: "Asla Temizleme (Devre Dışı)",
+    settingsClipboardClearSec: "{sec} Saniye",
+
     settingsStartWithWindows: "Windows ile Birlikte Başlat",
     settingsStartWithWindowsHint: "Bilgisayar açıldığında PasCopyOf arka planda sistem tepsisinde otomatik başlasın.",
 
@@ -309,6 +314,11 @@ export const translations = {
     settingsAutoLockHint: "Automatically locks the vault after inactivity for extra security.",
     settingsAutoLockDisabled: "Disabled (Never Lock)",
     settingsAutoLockMinutes: "{min} Minutes",
+
+    settingsClipboardClearTitle: "Password Clipboard Clear Time",
+    settingsClipboardClearHint: "Specifies how many seconds a copied password stays in the clipboard before being automatically cleared.",
+    settingsClipboardClearDisabled: "Never Clear (Disabled)",
+    settingsClipboardClearSec: "{sec} Seconds",
 
     settingsStartWithWindows: "Start with Windows",
     settingsStartWithWindowsHint: "Automatically launch PasCopyOf minimized to system tray on computer startup.",
