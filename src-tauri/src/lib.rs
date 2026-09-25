@@ -1125,7 +1125,7 @@ async fn copy_password(
             let _ = window.hide();
         }
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(150)).await;
             win_paste::simulate_paste();
         });
     }
@@ -1173,7 +1173,7 @@ async fn copy_username(
             let _ = window.hide();
         }
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(150)).await;
             win_paste::simulate_paste();
         });
     }
@@ -1876,7 +1876,12 @@ async fn copy_from_history(
         }
         "image" => {
             if let Some(path) = image_path {
-                if let Ok(img) = RustImageData::from_path(&path) {
+                let img_res = RustImageData::from_path(&path).or_else(|_| {
+                    image::open(&path)
+                        .map(RustImageData::from_dynamic_image)
+                        .map_err(|e| e.to_string())
+                });
+                if let Ok(img) = img_res {
                     ctx.set_image(img).map_err(|e| e.to_string())?;
                 }
             }
@@ -1907,7 +1912,7 @@ async fn copy_from_history(
     };
     if auto_paste {
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(150)).await;
             win_paste::simulate_paste();
         });
     }
@@ -2171,9 +2176,9 @@ async fn copy_annotated_image(
     let ctx = ClipboardContext::new().map_err(|e| e.to_string())?;
     ctx.set_image(rust_img).map_err(|e| e.to_string())?;
 
-    let show_notif = {
+    let (show_notif, auto_paste) = {
         let st = state.0.lock().map_err(|e| e.to_string())?;
-        st.screenshot_notification_enabled
+        (st.screenshot_notification_enabled, st.auto_paste_on_select)
     };
 
     if show_notif {
@@ -2188,6 +2193,13 @@ async fn copy_annotated_image(
 
     if let Some(w) = app.get_webview_window("screenshot-overlay") {
         let _ = w.hide();
+    }
+
+    if auto_paste {
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            win_paste::simulate_paste();
+        });
     }
     Ok(())
 }
@@ -2408,10 +2420,14 @@ mod win_paste {
 
     pub fn simulate_paste() {
         unsafe {
-            keybd_event(VK_CONTROL, 0, 0, 0);
-            keybd_event(VK_V, 0, 0, 0);
-            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
-            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+            // VK_CONTROL scan code is 0x1D, VK_V scan code is 0x2F
+            keybd_event(VK_CONTROL, 0x1D, 0, 0);
+            std::thread::sleep(std::time::Duration::from_millis(15));
+            keybd_event(VK_V, 0x2F, 0, 0);
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            keybd_event(VK_V, 0x2F, KEYEVENTF_KEYUP, 0);
+            std::thread::sleep(std::time::Duration::from_millis(15));
+            keybd_event(VK_CONTROL, 0x1D, KEYEVENTF_KEYUP, 0);
         }
     }
 }
@@ -2424,7 +2440,7 @@ mod win_paste {
 #[tauri::command]
 async fn trigger_auto_paste() -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
         win_paste::simulate_paste();
     });
     Ok(())
