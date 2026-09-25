@@ -16,6 +16,9 @@ import {
 } from "../api/clipboard";
 import type { ClipboardItem, ClipboardFilterType } from "../api/clipboard";
 import { useApp } from "../context/AppContext";
+import { SaveToVaultModal } from "../components/SaveToVaultModal";
+import { useToast } from "../hooks/useToast";
+import { ToastContainer } from "../components/Toast";
 
 export default function ClipboardLauncherPage() {
   const { t, lang } = useApp();
@@ -26,9 +29,14 @@ export default function ClipboardLauncherPage() {
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [hoverPreviewItem, setHoverPreviewItem] = useState<ClipboardItem | null>(null);
+  const [saveToVaultItem, setSaveToVaultItem] = useState<ClipboardItem | null>(null);
   const [previewDelayMs, setPreviewDelayMs] = useState(2000);
   const hoverPreviewItemRef = useRef(hoverPreviewItem);
   hoverPreviewItemRef.current = hoverPreviewItem;
+  const saveToVaultItemRef = useRef(saveToVaultItem);
+  saveToVaultItemRef.current = saveToVaultItem;
+
+  const { toasts, showToast, removeToast } = useToast();
 
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -68,11 +76,14 @@ export default function ClipboardLauncherPage() {
     const win = getCurrentWindow();
     const unlistenFocus = win.onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        setTimeout(() => searchRef.current?.focus(), 20);
+        if (!saveToVaultItemRef.current) {
+          setTimeout(() => searchRef.current?.focus(), 20);
+        }
         fetchItems(query, filterType);
         loadSettings();
       } else {
         setHoverPreviewItem(null);
+        setSaveToVaultItem(null);
         hideClipboardLauncher();
       }
     });
@@ -106,6 +117,16 @@ export default function ClipboardLauncherPage() {
     setFilterType(f);
     setHoverPreviewItem(null);
     fetchItems(query, f);
+  };
+
+  const handleOpenSaveToVault = (e: React.MouseEvent | null, item: ClipboardItem) => {
+    if (e) e.stopPropagation();
+    setHoverPreviewItem(null);
+    setSaveToVaultItem(item);
+  };
+
+  const handleSaveSuccess = (savedKeyName: string) => {
+    showToast(t("clipVaultSavedSuccess", { name: savedKeyName }), "success");
   };
 
   const handleCopy = async (id: number) => {
@@ -157,10 +178,24 @@ export default function ClipboardLauncherPage() {
   // Keyboard navigation & lingering 2s preview
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // If modal is open, let modal handle keyboard events
+      if (saveToVaultItemRef.current !== null) {
+        return;
+      }
+
       if (e.key === "Escape") {
         e.preventDefault();
         setHoverPreviewItem(null);
         hideClipboardLauncher();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        const sel = items[selectedIndex];
+        if (sel && (sel.contentType === "text" || sel.textContent)) {
+          handleOpenSaveToVault(null, sel);
+        }
         return;
       }
 
@@ -442,6 +477,15 @@ export default function ClipboardLauncherPage() {
 
                   {/* Right Actions */}
                   <div className="clip-item-actions">
+                    {(item.contentType === "text" || item.textContent) && (
+                      <button
+                        className="clip-action-btn vault-save"
+                        title={t("clipSaveToVaultHint")}
+                        onClick={(e) => handleOpenSaveToVault(e, item)}
+                      >
+                        🔒
+                      </button>
+                    )}
                     <button
                       className={`clip-action-btn pin ${item.isPinned ? "active" : ""}`}
                       title={item.isPinned ? "Sabitlemeyi Kaldır" : "Sabitle"}
@@ -472,6 +516,7 @@ export default function ClipboardLauncherPage() {
           <div className="clip-footer-hints">
             <span className="clip-kbd">↑↓</span> Gezin
             <span className="clip-kbd">↵</span> Kopyala
+            <span className="clip-kbd">Ctrl+S</span> Kasaya
             <span className="clip-kbd">Del</span> Sil
             <span className="clip-kbd">Esc</span> Kapat
           </div>
@@ -579,18 +624,42 @@ export default function ClipboardLauncherPage() {
             <span className="clip-preview-time">
               {hoverPreviewItem.copiedAt}
             </span>
-            <button
-              className="clip-preview-copy-btn"
-              onClick={() => handleCopy(hoverPreviewItem.id)}
-            >
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>Kopyala (↵)</span>
-            </button>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              {(hoverPreviewItem.contentType === "text" || hoverPreviewItem.textContent) && (
+                <button
+                  className="clip-preview-vault-btn"
+                  title={t("clipSaveToVaultHint")}
+                  onClick={(e) => handleOpenSaveToVault(e, hoverPreviewItem)}
+                >
+                  🔒 <span>{t("clipSaveToVault")}</span>
+                </button>
+              )}
+              <button
+                className="clip-preview-copy-btn"
+                onClick={() => handleCopy(hoverPreviewItem.id)}
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Kopyala (↵)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Save to Vault Modal */}
+      <SaveToVaultModal
+        isOpen={saveToVaultItem !== null}
+        initialText={saveToVaultItem?.textContent || saveToVaultItem?.preview || ""}
+        onClose={() => {
+          setSaveToVaultItem(null);
+          setTimeout(() => searchRef.current?.focus(), 50);
+        }}
+        onSuccess={handleSaveSuccess}
+      />
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

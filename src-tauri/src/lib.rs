@@ -1203,6 +1203,7 @@ async fn toggle_favorite(id: i64, state: State<'_, SafeAppState>) -> Result<bool
 
 #[tauri::command]
 async fn add_credential(
+    app: AppHandle,
     keyName: String,
     username: String,
     password: String,
@@ -1226,7 +1227,9 @@ async fn add_credential(
         params![keyName, username, password_encrypted, notes, categoryId],
     )
     .map_err(|e| e.to_string())?;
-    Ok(conn.last_insert_rowid())
+    let id = conn.last_insert_rowid();
+    let _ = app.emit("vault-updated", ());
+    Ok(id)
 }
 
 #[tauri::command]
