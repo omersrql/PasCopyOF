@@ -390,8 +390,7 @@ fn toggle_launcher_window(app: &AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            let _ = window.show();
-            let _ = window.set_focus();
+            let _ = show_launcher_window(app);
         }
     }
 }
@@ -420,6 +419,86 @@ fn get_screen_cursor_pos() -> Option<(i32, i32)> {
     None
 }
 
+fn get_monitor_for_cursor(app: &AppHandle, cursor: Option<(i32, i32)>) -> Option<tauri::Monitor> {
+    let monitors = app.available_monitors().ok()?;
+    if monitors.is_empty() {
+        return None;
+    }
+
+    if let Some((cx, cy)) = cursor {
+        // 1. Strict containment check
+        for m in &monitors {
+            let pos = m.position();
+            let size = m.size();
+            let min_x = pos.x;
+            let max_x = pos.x + size.width as i32;
+            let min_y = pos.y;
+            let max_y = pos.y + size.height as i32;
+            if cx >= min_x && cx < max_x && cy >= min_y && cy < max_y {
+                return Some(m.clone());
+            }
+        }
+
+        // 2. Nearest monitor distance check (if cursor is on boundary or slightly off)
+        let mut best_monitor = None;
+        let mut min_dist = i64::MAX;
+        for m in &monitors {
+            let pos = m.position();
+            let size = m.size();
+            let center_x = pos.x + (size.width as i32 / 2);
+            let center_y = pos.y + (size.height as i32 / 2);
+            let dx = (cx - center_x) as i64;
+            let dy = (cy - center_y) as i64;
+            let dist = dx * dx + dy * dy;
+            if dist < min_dist {
+                min_dist = dist;
+                best_monitor = Some(m.clone());
+            }
+        }
+        if best_monitor.is_some() {
+            return best_monitor;
+        }
+    }
+
+    // Fallback: primary monitor or first available
+    app.primary_monitor().ok().flatten().or_else(|| monitors.into_iter().next())
+}
+
+fn show_launcher_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("launcher") {
+        let cursor = get_screen_cursor_pos()
+            .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+        let monitor = get_monitor_for_cursor(app, cursor);
+
+        if let Some(ref m) = monitor {
+            let m_pos = m.position();
+            let m_size = m.size();
+            let scale = m.scale_factor();
+            let win_w = 640.0;
+            let win_h = 480.0;
+            let win_w_phys = win_w * scale;
+            let win_h_phys = win_h * scale;
+
+            let target_x = m_pos.x as f64 + (m_size.width as f64 - win_w_phys) / 2.0;
+            let target_y = m_pos.y as f64 + (m_size.height as f64 - win_h_phys) / 2.0;
+
+            let pos = tauri::Position::Physical(tauri::PhysicalPosition {
+                x: target_x as i32,
+                y: target_y as i32,
+            });
+            let _ = window.set_position(pos);
+            let _ = window.show();
+            let _ = window.set_position(pos);
+            let _ = window.set_focus();
+        } else {
+            let _ = window.center();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+    Ok(())
+}
+
 fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<SafeAppState>();
     {
@@ -445,10 +524,14 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
             st.clipboard_window_mode.clone()
         };
 
+        let cursor = get_screen_cursor_pos()
+            .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+        let monitor = get_monitor_for_cursor(app, cursor);
+
         if window_mode == "fullscreen" {
-            if let Ok(Some(monitor)) = window.current_monitor() {
-                let m_pos = monitor.position();
-                let m_size = monitor.size();
+            if let Some(ref m) = monitor {
+                let m_pos = m.position();
+                let m_size = m.size();
                 let _ = window.set_position(tauri::Position::Physical(*m_pos));
                 let _ = window.set_size(tauri::Size::Physical(*m_size));
             } else {
@@ -465,34 +548,38 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
                 height: window_height,
             }));
 
-            // Get global screen cursor position (native Win32 or Tauri fallback)
-            let cursor = get_screen_cursor_pos()
-                .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+            if let Some(ref m) = monitor {
+                let m_pos = m.position();
+                let m_size = m.size();
+                let scale = m.scale_factor();
+                let win_w_phys = window_width * scale;
+                let win_h_phys = window_height * scale;
 
-            if let Some((cur_x, cur_y)) = cursor {
-                let mut target_x = cur_x as f64 + 10.0;
-                let mut target_y = cur_y as f64 + 10.0;
+                let (target_x, target_y) = if let Some((cur_x, cur_y)) = cursor {
+                    let mut tx = cur_x as f64 + 10.0;
+                    let mut ty = cur_y as f64 + 10.0;
 
-                if let Ok(Some(monitor)) = window.current_monitor() {
-                    let m_pos = monitor.position();
-                    let m_size = monitor.size();
-                    let scale = monitor.scale_factor();
-                    let max_x = m_pos.x as f64 + m_size.width as f64 - (window_width * scale);
-                    let max_y = m_pos.y as f64 + m_size.height as f64 - (window_height * scale);
+                    let max_x = m_pos.x as f64 + m_size.width as f64 - win_w_phys;
+                    let max_y = m_pos.y as f64 + m_size.height as f64 - win_h_phys;
 
-                    if target_x > max_x {
-                        target_x = cur_x as f64 - (window_width * scale) - 10.0;
+                    if tx > max_x {
+                        tx = cur_x as f64 - win_w_phys - 10.0;
                     }
-                    if target_y > max_y {
-                        target_y = cur_y as f64 - (window_height * scale) - 10.0;
+                    if ty > max_y {
+                        ty = cur_y as f64 - win_h_phys - 10.0;
                     }
-                    if target_x < m_pos.x as f64 {
-                        target_x = m_pos.x as f64 + 10.0;
+                    if tx < m_pos.x as f64 {
+                        tx = m_pos.x as f64 + 10.0;
                     }
-                    if target_y < m_pos.y as f64 {
-                        target_y = m_pos.y as f64 + 10.0;
+                    if ty < m_pos.y as f64 {
+                        ty = m_pos.y as f64 + 10.0;
                     }
-                }
+                    (tx, ty)
+                } else {
+                    let tx = m_pos.x as f64 + (m_size.width as f64 - win_w_phys) / 2.0;
+                    let ty = m_pos.y as f64 + (m_size.height as f64 - win_h_phys) / 2.0;
+                    (tx, ty)
+                };
 
                 let pos = tauri::Position::Physical(tauri::PhysicalPosition {
                     x: target_x as i32,
@@ -841,10 +928,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show_launcher" => {
-                if let Some(window) = app.get_webview_window("launcher") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                let _ = show_launcher_window(app);
             }
             "show_clipboard" => {
                 let _ = show_clipboard_launcher_window(app);
@@ -1404,11 +1488,7 @@ async fn delete_category(id: i64, state: State<'_, SafeAppState>) -> Result<(), 
 
 #[tauri::command]
 async fn show_launcher(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("launcher") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    show_launcher_window(&app)
 }
 
 #[tauri::command]
@@ -2157,10 +2237,14 @@ async fn update_clipboard_settings(
     // Live update window if clipboard-launcher exists
     if let Some(ref mode) = window_mode {
         if let Some(window) = app.get_webview_window("clipboard-launcher") {
+            let cursor = get_screen_cursor_pos()
+                .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+            let monitor = get_monitor_for_cursor(&app, cursor);
+
             if mode == "fullscreen" {
-                if let Ok(Some(monitor)) = window.current_monitor() {
-                    let m_pos = monitor.position();
-                    let m_size = monitor.size();
+                if let Some(ref m) = monitor {
+                    let m_pos = m.position();
+                    let m_size = m.size();
                     let _ = window.set_position(tauri::Position::Physical(*m_pos));
                     let _ = window.set_size(tauri::Size::Physical(*m_size));
                 }
