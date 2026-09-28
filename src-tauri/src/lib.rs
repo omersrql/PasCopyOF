@@ -47,6 +47,9 @@ pub struct AppState {
     pub clipboard_enabled: bool,
     pub clipboard_preview_delay_ms: u32,
     pub auto_paste_on_select: bool,
+    pub clipboard_window_mode: String,
+    pub clipboard_close_on_blur: bool,
+    pub clipboard_close_on_space: bool,
     pub clipboard_clear_seconds: u64, // 0 = disabled (never clear)
     pub idle_timeout_minutes: u64, // 0 = disabled
     pub last_activity: Instant,
@@ -84,6 +87,9 @@ pub struct ClipboardSettings {
     pub enabled: bool,
     pub preview_delay_ms: u32,
     pub auto_paste_on_select: bool,
+    pub window_mode: String,
+    pub close_on_blur: bool,
+    pub close_on_space: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -434,48 +440,73 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
             return Ok(());
         }
 
-        // Get global screen cursor position (native Win32 or Tauri fallback)
-        let cursor = get_screen_cursor_pos()
-            .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+        let window_mode = {
+            let st = state.0.lock().map_err(|e| e.to_string())?;
+            st.clipboard_window_mode.clone()
+        };
 
-        if let Some((cur_x, cur_y)) = cursor {
-            let window_width = 900.0;
-            let window_height = 500.0;
-            let mut target_x = cur_x as f64 + 10.0;
-            let mut target_y = cur_y as f64 + 10.0;
-
+        if window_mode == "fullscreen" {
             if let Ok(Some(monitor)) = window.current_monitor() {
                 let m_pos = monitor.position();
                 let m_size = monitor.size();
-                let scale = monitor.scale_factor();
-                let max_x = m_pos.x as f64 + m_size.width as f64 - (window_width * scale);
-                let max_y = m_pos.y as f64 + m_size.height as f64 - (window_height * scale);
-
-                if target_x > max_x {
-                    target_x = cur_x as f64 - (window_width * scale) - 10.0;
-                }
-                if target_y > max_y {
-                    target_y = cur_y as f64 - (window_height * scale) - 10.0;
-                }
-                if target_x < m_pos.x as f64 {
-                    target_x = m_pos.x as f64 + 10.0;
-                }
-                if target_y < m_pos.y as f64 {
-                    target_y = m_pos.y as f64 + 10.0;
-                }
+                let _ = window.set_position(tauri::Position::Physical(*m_pos));
+                let _ = window.set_size(tauri::Size::Physical(*m_size));
+            } else {
+                let _ = window.maximize();
             }
-
-            let pos = tauri::Position::Physical(tauri::PhysicalPosition {
-                x: target_x as i32,
-                y: target_y as i32,
-            });
-            let _ = window.set_position(pos);
             let _ = window.show();
-            let _ = window.set_position(pos); // ensure applied after shown
             let _ = window.set_focus();
         } else {
-            let _ = window.show();
-            let _ = window.set_focus();
+            let _ = window.unmaximize();
+            let window_width = 900.0;
+            let window_height = 500.0;
+            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                width: window_width,
+                height: window_height,
+            }));
+
+            // Get global screen cursor position (native Win32 or Tauri fallback)
+            let cursor = get_screen_cursor_pos()
+                .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+
+            if let Some((cur_x, cur_y)) = cursor {
+                let mut target_x = cur_x as f64 + 10.0;
+                let mut target_y = cur_y as f64 + 10.0;
+
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let m_pos = monitor.position();
+                    let m_size = monitor.size();
+                    let scale = monitor.scale_factor();
+                    let max_x = m_pos.x as f64 + m_size.width as f64 - (window_width * scale);
+                    let max_y = m_pos.y as f64 + m_size.height as f64 - (window_height * scale);
+
+                    if target_x > max_x {
+                        target_x = cur_x as f64 - (window_width * scale) - 10.0;
+                    }
+                    if target_y > max_y {
+                        target_y = cur_y as f64 - (window_height * scale) - 10.0;
+                    }
+                    if target_x < m_pos.x as f64 {
+                        target_x = m_pos.x as f64 + 10.0;
+                    }
+                    if target_y < m_pos.y as f64 {
+                        target_y = m_pos.y as f64 + 10.0;
+                    }
+                }
+
+                let pos = tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: target_x as i32,
+                    y: target_y as i32,
+                });
+                let _ = window.set_position(pos);
+                let _ = window.show();
+                let _ = window.set_position(pos); // ensure applied after shown
+                let _ = window.set_focus();
+            } else {
+                let _ = window.center();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
         }
     }
     Ok(())
@@ -2047,6 +2078,9 @@ async fn get_clipboard_settings(
         enabled: st.clipboard_enabled,
         preview_delay_ms: st.clipboard_preview_delay_ms,
         auto_paste_on_select: st.auto_paste_on_select,
+        window_mode: st.clipboard_window_mode.clone(),
+        close_on_blur: st.clipboard_close_on_blur,
+        close_on_space: st.clipboard_close_on_space,
     })
 }
 
@@ -2057,6 +2091,10 @@ async fn update_clipboard_settings(
     enabled: bool,
     preview_delay_ms: Option<u32>,
     auto_paste_on_select: Option<bool>,
+    window_mode: Option<String>,
+    close_on_blur: Option<bool>,
+    close_on_space: Option<bool>,
+    app: AppHandle,
     state: State<'_, SafeAppState>,
 ) -> Result<(), String> {
     let delay = preview_delay_ms.unwrap_or(2000);
@@ -2067,6 +2105,15 @@ async fn update_clipboard_settings(
     st.clipboard_preview_delay_ms = delay;
     if let Some(auto) = auto_paste_on_select {
         st.auto_paste_on_select = auto;
+    }
+    if let Some(ref mode) = window_mode {
+        st.clipboard_window_mode = mode.clone();
+    }
+    if let Some(cob) = close_on_blur {
+        st.clipboard_close_on_blur = cob;
+    }
+    if let Some(cos) = close_on_space {
+        st.clipboard_close_on_space = cos;
     }
 
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
@@ -2097,6 +2144,37 @@ async fn update_clipboard_settings(
         )
         .map_err(|e| e.to_string())?;
     }
+    if let Some(ref mode) = window_mode {
+        set_meta(&conn, "clipboard_window_mode", mode).map_err(|e| e.to_string())?;
+    }
+    if let Some(cob) = close_on_blur {
+        set_meta(&conn, "clipboard_close_on_blur", if cob { "1" } else { "0" }).map_err(|e| e.to_string())?;
+    }
+    if let Some(cos) = close_on_space {
+        set_meta(&conn, "clipboard_close_on_space", if cos { "1" } else { "0" }).map_err(|e| e.to_string())?;
+    }
+
+    // Live update window if clipboard-launcher exists
+    if let Some(ref mode) = window_mode {
+        if let Some(window) = app.get_webview_window("clipboard-launcher") {
+            if mode == "fullscreen" {
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let m_pos = monitor.position();
+                    let m_size = monitor.size();
+                    let _ = window.set_position(tauri::Position::Physical(*m_pos));
+                    let _ = window.set_size(tauri::Size::Physical(*m_size));
+                }
+            } else {
+                let _ = window.unmaximize();
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                    width: 900.0,
+                    height: 500.0,
+                }));
+            }
+        }
+    }
+    let _ = app.emit("clipboard-settings-updated", ());
+
     Ok(())
 }
 
@@ -2533,6 +2611,14 @@ pub fn run() {
             let auto_paste_on_select = get_meta(&conn, "auto_paste_on_select")
                 .map(|v| v != "0")
                 .unwrap_or(true);
+            let clipboard_window_mode = get_meta(&conn, "clipboard_window_mode")
+                .unwrap_or_else(|| "popup".to_string());
+            let clipboard_close_on_blur = get_meta(&conn, "clipboard_close_on_blur")
+                .map(|v| v != "0")
+                .unwrap_or(true);
+            let clipboard_close_on_space = get_meta(&conn, "clipboard_close_on_space")
+                .map(|v| v != "0")
+                .unwrap_or(true);
             let clipboard_clear_seconds = get_meta(&conn, "clipboard_clear_seconds")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15);
@@ -2554,6 +2640,9 @@ pub fn run() {
                 clipboard_enabled,
                 clipboard_preview_delay_ms,
                 auto_paste_on_select,
+                clipboard_window_mode,
+                clipboard_close_on_blur,
+                clipboard_close_on_space,
                 clipboard_clear_seconds,
                 idle_timeout_minutes,
                 last_activity: Instant::now(),
@@ -2606,6 +2695,21 @@ pub fn run() {
             });
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(focused) = event {
+                if !focused && window.label() == "clipboard-launcher" {
+                    let state = window.app_handle().state::<SafeAppState>();
+                    let close_on_blur = if let Ok(st) = state.0.lock() {
+                        st.clipboard_close_on_blur
+                    } else {
+                        true
+                    };
+                    if close_on_blur {
+                        let _ = window.hide();
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             check_vault_initialized,

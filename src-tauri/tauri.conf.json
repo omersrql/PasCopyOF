@@ -33,7 +33,7 @@
         "url": "/#/clipboard",
         "width": 900,
         "height": 500,
-        "resizable": false,
+        "resizable": true,
         "decorations": false,
         "transparent": true,
         "center": false,

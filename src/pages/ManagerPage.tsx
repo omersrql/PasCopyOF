@@ -120,6 +120,9 @@ export default function ManagerPage() {
   const [clipboardEnabled, setClipboardEnabled] = useState(true);
   const [clipboardPreviewDelayMs, setClipboardPreviewDelayMs] = useState(2000);
   const [autoPasteOnSelect, setAutoPasteOnSelect] = useState(true);
+  const [clipboardWindowMode, setClipboardWindowMode] = useState<"popup" | "fullscreen">("popup");
+  const [clipboardCloseOnBlur, setClipboardCloseOnBlur] = useState<boolean>(true);
+  const [clipboardCloseOnSpace, setClipboardCloseOnSpace] = useState<boolean>(true);
 
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
@@ -207,6 +210,9 @@ export default function ManagerPage() {
           enabled: true,
           previewDelayMs: 2000,
           autoPasteOnSelect: true,
+          windowMode: "popup" as const,
+          closeOnBlur: true,
+          closeOnSpace: true,
         })),
         getScreenshotSettings().catch(() => ({
           shortcut: "Ctrl+Shift+S",
@@ -226,6 +232,9 @@ export default function ManagerPage() {
         setClipboardEnabled(clipSettings.enabled);
         setClipboardPreviewDelayMs(clipSettings.previewDelayMs ?? 2000);
         setAutoPasteOnSelect(clipSettings.autoPasteOnSelect ?? true);
+        setClipboardWindowMode((clipSettings.windowMode as "popup" | "fullscreen") || "popup");
+        setClipboardCloseOnBlur(clipSettings.closeOnBlur ?? true);
+        setClipboardCloseOnSpace(clipSettings.closeOnSpace ?? true);
       }
       if (scSettings) {
         setScreenshotShortcutState(scSettings.shortcut);
@@ -784,7 +793,9 @@ export default function ManagerPage() {
                   </div>
 
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Tek Seferde Yüklenecek Kayıt Limiti</div>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
+                      {t("settingsClipPageSizeTitle")}
+                    </div>
                     <select
                       className="form-input"
                       value={clipboardPageSize}
@@ -792,23 +803,144 @@ export default function ManagerPage() {
                         const nextSize = Number(e.target.value);
                         setClipboardPageSize(nextSize);
                         try {
-                          await updateClipboardSettings(nextSize, clipboardLockWithVault, clipboardEnabled, clipboardPreviewDelayMs);
+                          await updateClipboardSettings(
+                            nextSize,
+                            clipboardLockWithVault,
+                            clipboardEnabled,
+                            clipboardPreviewDelayMs,
+                            autoPasteOnSelect,
+                            clipboardWindowMode,
+                            clipboardCloseOnBlur,
+                            clipboardCloseOnSpace
+                          );
                           showToast(`Kayıt limiti ${nextSize} olarak güncellendi`, "success");
                         } catch (err) {
                           showToast(String(err), "error");
                         }
                       }}
                     >
+                      <option value={15}>15 Kayıt (Hafif Görünüm)</option>
                       <option value={25}>25 Kayıt</option>
                       <option value={50}>50 Kayıt</option>
                       <option value={100}>100 Kayıt (Önerilen)</option>
-                      <option value={250}>250 Kayıt</option>
+                      <option value={200}>200 Kayıt</option>
                       <option value={500}>500 Kayıt</option>
                       <option value={1000}>1.000 Kayıt</option>
                       <option value={2500}>2.500 Kayıt</option>
                       <option value={5000}>5.000 Kayıt (Geniş Arşiv)</option>
                       <option value={10000}>10.000 Kayıt (Maksimum)</option>
                     </select>
+                    <p className="settings-hint" style={{ marginTop: 4 }}>
+                      {t("settingsClipPageSizeHint")}
+                    </p>
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                      {t("settingsClipWindowMode")}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setClipboardWindowMode("popup");
+                          try {
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              "popup",
+                              clipboardCloseOnBlur,
+                              clipboardCloseOnSpace
+                            );
+                            showToast("Pano formatı: Açılır Pencere (Popup)", "success");
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          border: clipboardWindowMode === "popup"
+                            ? "2px solid #0ea5e9"
+                            : "1px solid rgba(255, 255, 255, 0.12)",
+                          background: clipboardWindowMode === "popup"
+                            ? "rgba(14, 165, 233, 0.15)"
+                            : "rgba(255, 255, 255, 0.03)",
+                          color: "#fff",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "all 0.18s ease",
+                        }}
+                      >
+                        <span style={{ fontSize: 20 }}>🗗</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>
+                            {t("settingsClipWindowModePopup")}
+                          </div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                            900 × 500 px (Kompakt)
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setClipboardWindowMode("fullscreen");
+                          try {
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              "fullscreen",
+                              clipboardCloseOnBlur,
+                              clipboardCloseOnSpace
+                            );
+                            showToast("Pano formatı: Tam Ekran (Fullscreen)", "success");
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          border: clipboardWindowMode === "fullscreen"
+                            ? "2px solid #0ea5e9"
+                            : "1px solid rgba(255, 255, 255, 0.12)",
+                          background: clipboardWindowMode === "fullscreen"
+                            ? "rgba(14, 165, 233, 0.15)"
+                            : "rgba(255, 255, 255, 0.03)",
+                          color: "#fff",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "all 0.18s ease",
+                        }}
+                      >
+                        <span style={{ fontSize: 20 }}>⛶</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>
+                            {t("settingsClipWindowModeFullscreen")}
+                          </div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                            Tüm Ekran (Geniş Odak)
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                    <p className="settings-hint" style={{ marginTop: 6 }}>
+                      {t("settingsClipWindowModeHint")}
+                    </p>
                   </div>
 
                   <div style={{ marginBottom: 12 }}>
@@ -822,7 +954,16 @@ export default function ManagerPage() {
                         const nextDelay = Number(e.target.value);
                         setClipboardPreviewDelayMs(nextDelay);
                         try {
-                          await updateClipboardSettings(clipboardPageSize, clipboardLockWithVault, clipboardEnabled, nextDelay);
+                          await updateClipboardSettings(
+                            clipboardPageSize,
+                            clipboardLockWithVault,
+                            clipboardEnabled,
+                            nextDelay,
+                            autoPasteOnSelect,
+                            clipboardWindowMode,
+                            clipboardCloseOnBlur,
+                            clipboardCloseOnSpace
+                          );
                           showToast(
                             nextDelay === 0
                               ? "Önizleme gecikmesiz (anında) açılacak"
@@ -857,7 +998,16 @@ export default function ManagerPage() {
                           const nextLock = e.target.checked;
                           setClipboardLockWithVault(nextLock);
                           try {
-                            await updateClipboardSettings(clipboardPageSize, nextLock, clipboardEnabled, clipboardPreviewDelayMs, autoPasteOnSelect);
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              nextLock,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              clipboardWindowMode,
+                              clipboardCloseOnBlur,
+                              clipboardCloseOnSpace
+                            );
                             showToast(
                               nextLock
                                 ? "Kasa kilitliyken pano geçmişi de kilitlenecek"
@@ -880,7 +1030,16 @@ export default function ManagerPage() {
                           const nextEnabled = e.target.checked;
                           setClipboardEnabled(nextEnabled);
                           try {
-                            await updateClipboardSettings(clipboardPageSize, clipboardLockWithVault, nextEnabled, clipboardPreviewDelayMs, autoPasteOnSelect);
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              nextEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              clipboardWindowMode,
+                              clipboardCloseOnBlur,
+                              clipboardCloseOnSpace
+                            );
                             showToast(
                               nextEnabled ? "Pano geçmişi kaydı aktif" : "Pano geçmişi kaydı duraklatıldı",
                               "success"
@@ -906,7 +1065,10 @@ export default function ManagerPage() {
                               clipboardLockWithVault,
                               clipboardEnabled,
                               clipboardPreviewDelayMs,
-                              nextAuto
+                              nextAuto,
+                              clipboardWindowMode,
+                              clipboardCloseOnBlur,
+                              clipboardCloseOnSpace
                             );
                             showToast(
                               nextAuto
@@ -921,8 +1083,78 @@ export default function ManagerPage() {
                       />
                       {t("settingsAutoPasteTitle")}
                     </label>
-                    <p className="settings-hint" style={{ marginTop: 2, marginBottom: 4 }}>
+                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
                       {t("settingsAutoPasteHint")}
+                    </p>
+
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={clipboardCloseOnBlur}
+                        onChange={async (e) => {
+                          const nextBlur = e.target.checked;
+                          setClipboardCloseOnBlur(nextBlur);
+                          try {
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              clipboardWindowMode,
+                              nextBlur,
+                              clipboardCloseOnSpace
+                            );
+                            showToast(
+                              nextBlur
+                                ? "Pano dışına tıklandığında kapatma aktif"
+                                : "Pano dışına tıklandığında kapatma devre dışı",
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      {t("settingsClipCloseOnBlur")}
+                    </label>
+                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
+                      {t("settingsClipCloseOnBlurHint")}
+                    </p>
+
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={clipboardCloseOnSpace}
+                        onChange={async (e) => {
+                          const nextSpace = e.target.checked;
+                          setClipboardCloseOnSpace(nextSpace);
+                          try {
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              clipboardWindowMode,
+                              clipboardCloseOnBlur,
+                              nextSpace
+                            );
+                            showToast(
+                              nextSpace
+                                ? "Space tuşu ile kapatma aktif"
+                                : "Space tuşu ile kapatma devre dışı",
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      {t("settingsClipCloseOnSpace")}
+                    </label>
+                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
+                      {t("settingsClipCloseOnSpaceHint")}
                     </p>
                   </div>
 

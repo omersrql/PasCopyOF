@@ -147,6 +147,17 @@ export const translations = {
     settingsUpdaterInstallBtn: "Şimdi İndir ve Güncelle",
     settingsUpdaterDownloading: "Güncelleme indiriliyor... %{percent}",
 
+    settingsClipWindowMode: "Pano Görünüm Formatı",
+    settingsClipWindowModePopup: "Açılır Pencere (Popup)",
+    settingsClipWindowModeFullscreen: "Tam Ekran (Genişletilmiş)",
+    settingsClipWindowModeHint: "Pano geçmişinin imleç yanında kompakt bir pencere mi (900×500) yoksa ekranı kaplayan modern odaklı bir arayüz olarak mı açılacağını belirler.",
+    settingsClipCloseOnBlur: "Pano Dışına Tıklandığında Kapat",
+    settingsClipCloseOnBlurHint: "Pano penceresi veya arka plan dışına tıklandığında panoyu otomatik olarak kapatır.",
+    settingsClipCloseOnSpace: "Space (Boşluk) Tuşu ile Kapat",
+    settingsClipCloseOnSpaceHint: "Arama alanı boşken veya pano listesi üzerindeyken Space tuşuna basıldığında panoyu anında kapatır.",
+    settingsClipPageSizeTitle: "Ekrana Gelecek Kayıt Sayısı (Limit)",
+    settingsClipPageSizeHint: "Pano geçmişi ekranında aynı anda listelenecek maksimum kayıt sayısını belirler.",
+
     // Clipboard Launcher Page
     clipSearchPlaceholder: "Pano geçmişinde ara...",
     clipTabAll: "Tümü",
@@ -363,6 +374,17 @@ export const translations = {
     settingsUpdaterNewVersion: "A new version is available: v{version}",
     settingsUpdaterInstallBtn: "Download & Install Update",
     settingsUpdaterDownloading: "Downloading update... %{percent}",
+
+    settingsClipWindowMode: "Clipboard Display Mode",
+    settingsClipWindowModePopup: "Floating Popup",
+    settingsClipWindowModeFullscreen: "Full Screen Overlay",
+    settingsClipWindowModeHint: "Choose whether clipboard history opens as a compact popup near cursor (900×500) or as a full-screen focused interface.",
+    settingsClipCloseOnBlur: "Close on Click Outside",
+    settingsClipCloseOnBlurHint: "Automatically dismisses the clipboard panel when clicking outside or switching focus.",
+    settingsClipCloseOnSpace: "Close on Space Key",
+    settingsClipCloseOnSpaceHint: "Instantly closes the panel when pressing the Space key (when search bar is empty or list is focused).",
+    settingsClipPageSizeTitle: "Record Display Limit",
+    settingsClipPageSizeHint: "Specifies maximum number of clipboard items loaded at once.",
 
     // Clipboard Launcher Page
     clipSearchPlaceholder: "Search clipboard history...",

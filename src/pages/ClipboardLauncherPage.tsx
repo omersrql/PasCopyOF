@@ -31,10 +31,24 @@ export default function ClipboardLauncherPage() {
   const [hoverPreviewItem, setHoverPreviewItem] = useState<ClipboardItem | null>(null);
   const [saveToVaultItem, setSaveToVaultItem] = useState<ClipboardItem | null>(null);
   const [previewDelayMs, setPreviewDelayMs] = useState(2000);
+  const [windowMode, setWindowMode] = useState<"popup" | "fullscreen">("popup");
+  const [closeOnBlur, setCloseOnBlur] = useState<boolean>(true);
+  const [closeOnSpace, setCloseOnSpace] = useState<boolean>(true);
+  const [pageSize, setPageSize] = useState<number>(100);
+
   const hoverPreviewItemRef = useRef(hoverPreviewItem);
   hoverPreviewItemRef.current = hoverPreviewItem;
   const saveToVaultItemRef = useRef(saveToVaultItem);
   saveToVaultItemRef.current = saveToVaultItem;
+  const closeOnBlurRef = useRef(closeOnBlur);
+  closeOnBlurRef.current = closeOnBlur;
+  const closeOnSpaceRef = useRef(closeOnSpace);
+  closeOnSpaceRef.current = closeOnSpace;
+  const windowModeRef = useRef(windowMode);
+  windowModeRef.current = windowMode;
+  const pageSizeRef = useRef(pageSize);
+  pageSizeRef.current = pageSize;
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const { toasts, showToast, removeToast } = useToast();
 
@@ -47,8 +61,12 @@ export default function ClipboardLauncherPage() {
   const loadSettings = useCallback(() => {
     getClipboardSettings()
       .then((s) => {
-        if (s && typeof s.previewDelayMs === "number") {
-          setPreviewDelayMs(s.previewDelayMs);
+        if (s) {
+          if (typeof s.previewDelayMs === "number") setPreviewDelayMs(s.previewDelayMs);
+          if (s.windowMode) setWindowMode(s.windowMode);
+          if (typeof s.closeOnBlur === "boolean") setCloseOnBlur(s.closeOnBlur);
+          if (typeof s.closeOnSpace === "boolean") setCloseOnSpace(s.closeOnSpace);
+          if (typeof s.pageSize === "number" && s.pageSize > 0) setPageSize(s.pageSize);
         }
       })
       .catch(() => {});
@@ -57,7 +75,7 @@ export default function ClipboardLauncherPage() {
   const fetchItems = useCallback(async (q: string, filter: ClipboardFilterType) => {
     try {
       setLoading(true);
-      const data = await getClipboardHistory(q, filter);
+      const data = await getClipboardHistory(q, filter, pageSizeRef.current);
       setItems(data);
       setSelectedIndex(0);
       setHoverPreviewItem(null);
@@ -84,7 +102,9 @@ export default function ClipboardLauncherPage() {
       } else {
         setHoverPreviewItem(null);
         setSaveToVaultItem(null);
-        hideClipboardLauncher();
+        if (closeOnBlurRef.current) {
+          hideClipboardLauncher();
+        }
       }
     });
 
@@ -96,9 +116,18 @@ export default function ClipboardLauncherPage() {
       unlistenEvent = fn;
     });
 
+    let unlistenSettings: (() => void) | null = null;
+    listen("clipboard-settings-updated", () => {
+      loadSettings();
+      fetchItems(query, filterType);
+    }).then((fn) => {
+      unlistenSettings = fn;
+    });
+
     return () => {
       unlistenFocus.then((fn) => fn());
       if (unlistenEvent) unlistenEvent();
+      if (unlistenSettings) unlistenSettings();
     };
   }, [fetchItems, filterType, query, loadSettings]);
 
@@ -188,6 +217,16 @@ export default function ClipboardLauncherPage() {
         setHoverPreviewItem(null);
         hideClipboardLauncher();
         return;
+      }
+
+      if (e.key === " " && closeOnSpaceRef.current) {
+        const isTypingQuery = document.activeElement === searchRef.current && query.length > 0;
+        if (!isTypingQuery) {
+          e.preventDefault();
+          setHoverPreviewItem(null);
+          hideClipboardLauncher();
+          return;
+        }
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -316,10 +355,22 @@ export default function ClipboardLauncherPage() {
     }
   };
 
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === rootRef.current && closeOnBlurRef.current) {
+      setHoverPreviewItem(null);
+      hideClipboardLauncher();
+    }
+  };
+
   return (
-    <div className="clip-launcher-root" onMouseLeave={handleRootMouseLeave}>
+    <div
+      ref={rootRef}
+      className={`clip-launcher-root ${windowMode === "fullscreen" ? "fullscreen" : "popup"}`}
+      onClick={handleBackdropClick}
+      onMouseLeave={handleRootMouseLeave}
+    >
       {/* Main List Box */}
-      <div className="clip-launcher-main">
+      <div className="clip-launcher-main" onClick={(e) => e.stopPropagation()}>
         {/* Search Header */}
         <div className="clip-launcher-header">
           <div className="clip-launcher-search-box">
@@ -518,7 +569,7 @@ export default function ClipboardLauncherPage() {
             <span className="clip-kbd">↵</span> Kopyala
             <span className="clip-kbd">Ctrl+S</span> Kasaya
             <span className="clip-kbd">Del</span> Sil
-            <span className="clip-kbd">Esc</span> Kapat
+            <span className="clip-kbd">Esc{closeOnSpace ? " / Space" : ""}</span> Kapat
           </div>
           <div className="clip-footer-right">
             <span className="clip-count-label">{items.length} kayıt</span>

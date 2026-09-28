@@ -1297,6 +1297,46 @@ select.form-input option:hover,
   box-sizing: border-box;
 }
 
+.clip-launcher-root.fullscreen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(10, 15, 29, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 40px;
+  animation: launcher-backdrop-fade 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes launcher-backdrop-fade {
+  from {
+    background: rgba(10, 15, 29, 0);
+  }
+  to {
+    background: rgba(10, 15, 29, 0.72);
+  }
+}
+
+.clip-launcher-root.fullscreen .clip-launcher-main {
+  width: 620px;
+  height: 620px;
+  max-width: 90vw;
+  max-height: 86vh;
+  box-shadow: 0 35px 90px -15px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 50px rgba(14, 165, 233, 0.16);
+  border-radius: 18px;
+}
+
+.clip-launcher-root.fullscreen .clip-preview-popover {
+  width: 420px;
+  height: 620px;
+  max-height: 86vh;
+  box-shadow: 0 35px 90px -15px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+}
+
 .clip-launcher-window,
 .clip-launcher-main {
   width: 530px;
