@@ -3209,6 +3209,150 @@ select.form-input option:hover,
   animation: spin 0.6s linear infinite;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Panel Scale System (Small / Medium / Large)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── SMALL SCALE (85%) ───────────────────────────────────────────────────── */
+.clip-launcher-root[data-scale="small"] .clip-launcher-header {
+  padding: 8px 12px;
+  gap: 6px;
+}
+.clip-launcher-root[data-scale="small"] .clip-launcher-search-box {
+  height: 38px;
+}
+.clip-launcher-root[data-scale="small"] .clip-search-input {
+  font-size: 13px;
+}
+.clip-launcher-root[data-scale="small"] .clip-filter-chip {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.clip-launcher-root[data-scale="small"] .clip-item-card {
+  padding: 6px 10px;
+  gap: 8px;
+  border-radius: 8px;
+}
+.clip-launcher-root[data-scale="small"] .clip-item-preview {
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.clip-launcher-root[data-scale="small"] .clip-item-meta {
+  font-size: 10px;
+}
+.clip-launcher-root[data-scale="small"] .clip-type-badge {
+  width: 26px;
+  height: 26px;
+}
+.clip-launcher-root[data-scale="small"] .clip-img-thumb-wrap {
+  width: 44px;
+  height: 32px;
+}
+.clip-launcher-root.fullscreen[data-scale="small"] .clip-launcher-list {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  padding: 12px 16px;
+}
+.clip-launcher-root.fullscreen[data-scale="small"] .clip-item-card {
+  min-height: 60px;
+}
+
+/* Launcher Small */
+.launcher-root[data-scale="small"] .launcher-panel {
+  padding: 10px;
+}
+.launcher-root[data-scale="small"] .search-wrap {
+  padding: 8px 12px;
+}
+.launcher-root[data-scale="small"] .search-input {
+  font-size: 14px;
+}
+.launcher-root[data-scale="small"] .result-item {
+  padding: 6px 10px;
+  gap: 8px;
+}
+.launcher-root[data-scale="small"] .result-title {
+  font-size: 12.5px;
+}
+.launcher-root[data-scale="small"] .result-user {
+  font-size: 11px;
+}
+.launcher-root[data-scale="small"] .result-avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+/* ── LARGE SCALE (118%) ──────────────────────────────────────────────────── */
+.clip-launcher-root[data-scale="large"] .clip-launcher-header {
+  padding: 16px 20px;
+  gap: 12px;
+}
+.clip-launcher-root[data-scale="large"] .clip-launcher-search-box {
+  height: 48px;
+}
+.clip-launcher-root[data-scale="large"] .clip-search-input {
+  font-size: 16.5px;
+}
+.clip-launcher-root[data-scale="large"] .clip-filter-chip {
+  padding: 6px 14px;
+  font-size: 13.5px;
+}
+.clip-launcher-root[data-scale="large"] .clip-item-card {
+  padding: 12px 16px;
+  gap: 14px;
+  border-radius: 12px;
+}
+.clip-launcher-root[data-scale="large"] .clip-item-preview {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.clip-launcher-root[data-scale="large"] .clip-item-meta {
+  font-size: 12px;
+}
+.clip-launcher-root[data-scale="large"] .clip-type-badge {
+  width: 36px;
+  height: 36px;
+}
+.clip-launcher-root[data-scale="large"] .clip-img-thumb-wrap {
+  width: 68px;
+  height: 48px;
+}
+.clip-launcher-root.fullscreen[data-scale="large"] .clip-launcher-list {
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+  padding: 20px 24px;
+}
+.clip-launcher-root.fullscreen[data-scale="large"] .clip-item-card {
+  min-height: 84px;
+}
+
+/* Launcher Large */
+.launcher-root[data-scale="large"] .launcher-panel {
+  padding: 18px;
+}
+.launcher-root[data-scale="large"] .search-wrap {
+  padding: 14px 18px;
+}
+.launcher-root[data-scale="large"] .search-input {
+  font-size: 17.5px;
+}
+.launcher-root[data-scale="large"] .result-item {
+  padding: 12px 16px;
+  gap: 12px;
+}
+.launcher-root[data-scale="large"] .result-title {
+  font-size: 15px;
+}
+.launcher-root[data-scale="large"] .result-user {
+  font-size: 13px;
+}
+.launcher-root[data-scale="large"] .result-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
 
 
 

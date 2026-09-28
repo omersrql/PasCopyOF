@@ -52,6 +52,7 @@ pub struct AppState {
     pub clipboard_close_on_blur: bool,
     pub clipboard_close_on_space: bool,
     pub clipboard_clear_search_on_open: bool,
+    pub panel_scale: String,
     pub clipboard_clear_seconds: u64, // 0 = disabled (never clear)
     pub idle_timeout_minutes: u64, // 0 = disabled
     pub last_activity: Instant,
@@ -94,6 +95,7 @@ pub struct ClipboardSettings {
     pub close_on_blur: bool,
     pub close_on_space: bool,
     pub clear_search_on_open: bool,
+    pub panel_scale: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -484,10 +486,22 @@ fn show_launcher_window(app: &AppHandle) -> Result<(), String> {
             let m_log_w = m_size.width as f64 / scale;
             let m_log_h = m_size.height as f64 / scale;
 
-            // Adaptively scale based on screen resolution:
+            let panel_scale = {
+                let state = app.state::<SafeAppState>();
+                state.0.lock().map(|st| st.panel_scale.clone()).unwrap_or_else(|_| "medium".to_string())
+            };
+            let scale_mult: f64 = match panel_scale.as_str() {
+                "small" => 0.85,
+                "large" => 1.18,
+                _ => 1.0,
+            };
+
+            // Adaptively scale based on screen resolution and user panel_scale preference:
             // ~36% width (clamped 580 to 760) and ~46% height (clamped 440 to 620)
-            let win_w = (m_log_w * 0.36).clamp(580.0, 760.0);
-            let win_h = (m_log_h * 0.46).clamp(440.0, 620.0);
+            let base_w = (m_log_w * 0.36).clamp(580.0, 760.0);
+            let base_h = (m_log_h * 0.46).clamp(440.0, 620.0);
+            let win_w = (base_w * scale_mult).clamp(480.0, m_log_w * 0.90);
+            let win_h = (base_h * scale_mult).clamp(380.0, m_log_h * 0.90);
             let win_w_phys = win_w * scale;
             let win_h_phys = win_h * scale;
 
@@ -559,18 +573,30 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
         } else {
             let _ = window.unmaximize();
 
-            // Adaptively size the popup window based on the monitor resolution
+            let panel_scale = {
+                let state = app.state::<SafeAppState>();
+                state.0.lock().map(|st| st.panel_scale.clone()).unwrap_or_else(|_| "medium".to_string())
+            };
+            let scale_mult: f64 = match panel_scale.as_str() {
+                "small" => 0.85,
+                "large" => 1.18,
+                _ => 1.0,
+            };
+
+            // Adaptively size the popup window based on the monitor resolution and panel_scale
             let (window_width, window_height) = if let Some(ref m) = monitor {
                 let m_size = m.size();
                 let scale = m.scale_factor();
                 let m_log_w = m_size.width as f64 / scale;
                 let m_log_h = m_size.height as f64 / scale;
 
-                let w = (m_log_w * 0.50).clamp(780.0, 1020.0);
-                let h = (m_log_h * 0.52).clamp(440.0, 640.0);
+                let base_w = (m_log_w * 0.50).clamp(780.0, 1020.0);
+                let base_h = (m_log_h * 0.52).clamp(440.0, 640.0);
+                let w = (base_w * scale_mult).clamp(640.0, m_log_w * 0.95);
+                let h = (base_h * scale_mult).clamp(380.0, m_log_h * 0.95);
                 (w, h)
             } else {
-                (900.0, 500.0)
+                ((900.0 * scale_mult).clamp(640.0, 1200.0), (500.0 * scale_mult).clamp(380.0, 800.0))
             };
 
             let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
@@ -2210,6 +2236,7 @@ async fn get_clipboard_settings(
         close_on_blur: st.clipboard_close_on_blur,
         close_on_space: st.clipboard_close_on_space,
         clear_search_on_open: st.clipboard_clear_search_on_open,
+        panel_scale: st.panel_scale.clone(),
     })
 }
 
@@ -2224,6 +2251,7 @@ async fn update_clipboard_settings(
     close_on_blur: Option<bool>,
     close_on_space: Option<bool>,
     clear_search_on_open: Option<bool>,
+    panel_scale: Option<String>,
     app: AppHandle,
     state: State<'_, SafeAppState>,
 ) -> Result<(), String> {
@@ -2247,6 +2275,9 @@ async fn update_clipboard_settings(
     }
     if let Some(cso) = clear_search_on_open {
         st.clipboard_clear_search_on_open = cso;
+    }
+    if let Some(ref ps) = panel_scale {
+        st.panel_scale = ps.clone();
     }
 
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
@@ -2288,6 +2319,9 @@ async fn update_clipboard_settings(
     }
     if let Some(cso) = clear_search_on_open {
         set_meta(&conn, "clipboard_clear_search_on_open", if cso { "1" } else { "0" }).map_err(|e| e.to_string())?;
+    }
+    if let Some(ref ps) = panel_scale {
+        set_meta(&conn, "panel_scale", ps).map_err(|e| e.to_string())?;
     }
 
     // Live update window if clipboard-launcher exists
@@ -2762,6 +2796,8 @@ pub fn run() {
             let clipboard_clear_search_on_open = get_meta(&conn, "clipboard_clear_search_on_open")
                 .map(|v| v != "0")
                 .unwrap_or(true);
+            let panel_scale = get_meta(&conn, "panel_scale")
+                .unwrap_or_else(|| "medium".to_string());
             let clipboard_clear_seconds = get_meta(&conn, "clipboard_clear_seconds")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15);
@@ -2787,6 +2823,7 @@ pub fn run() {
                 clipboard_close_on_blur,
                 clipboard_close_on_space,
                 clipboard_clear_search_on_open,
+                panel_scale,
                 clipboard_clear_seconds,
                 idle_timeout_minutes,
                 last_activity: Instant::now(),

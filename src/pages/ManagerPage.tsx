@@ -124,6 +124,7 @@ export default function ManagerPage() {
   const [clipboardCloseOnBlur, setClipboardCloseOnBlur] = useState<boolean>(true);
   const [clipboardCloseOnSpace, setClipboardCloseOnSpace] = useState<boolean>(true);
   const [clipboardClearSearchOnOpen, setClipboardClearSearchOnOpen] = useState<boolean>(true);
+  const [panelScale, setPanelScale] = useState<"small" | "medium" | "large">("medium");
 
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
@@ -215,6 +216,7 @@ export default function ManagerPage() {
           closeOnBlur: true,
           closeOnSpace: true,
           clearSearchOnOpen: true,
+          panelScale: "medium" as const,
         })),
         getScreenshotSettings().catch(() => ({
           shortcut: "Ctrl+Shift+S",
@@ -238,6 +240,9 @@ export default function ManagerPage() {
         setClipboardCloseOnBlur(clipSettings.closeOnBlur ?? true);
         setClipboardCloseOnSpace(clipSettings.closeOnSpace ?? true);
         setClipboardClearSearchOnOpen(clipSettings.clearSearchOnOpen ?? true);
+        if (clipSettings.panelScale) {
+          setPanelScale((clipSettings.panelScale as "small" | "medium" | "large") || "medium");
+        }
       }
       if (scSettings) {
         setScreenshotShortcutState(scSettings.shortcut);
@@ -357,6 +362,57 @@ export default function ManagerPage() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingScreenshotShortcut, showToast]);
+
+  const saveClipboardPrefs = useCallback(
+    async (overrides: {
+      pageSize?: number;
+      lockWithVault?: boolean;
+      enabled?: boolean;
+      previewDelayMs?: number;
+      autoPasteOnSelect?: boolean;
+      windowMode?: "popup" | "fullscreen";
+      closeOnBlur?: boolean;
+      closeOnSpace?: boolean;
+      clearSearchOnOpen?: boolean;
+      panelScale?: "small" | "medium" | "large";
+    }) => {
+      const ps = overrides.pageSize ?? clipboardPageSize;
+      const lwv = overrides.lockWithVault ?? clipboardLockWithVault;
+      const en = overrides.enabled ?? clipboardEnabled;
+      const pd = overrides.previewDelayMs ?? clipboardPreviewDelayMs;
+      const ap = overrides.autoPasteOnSelect ?? autoPasteOnSelect;
+      const wm = overrides.windowMode ?? clipboardWindowMode;
+      const cob = overrides.closeOnBlur ?? clipboardCloseOnBlur;
+      const cos = overrides.closeOnSpace ?? clipboardCloseOnSpace;
+      const cso = overrides.clearSearchOnOpen ?? clipboardClearSearchOnOpen;
+      const sc = overrides.panelScale ?? panelScale;
+      await updateClipboardSettings(ps, lwv, en, pd, ap, wm, cob, cos, cso, sc);
+    },
+    [
+      clipboardPageSize,
+      clipboardLockWithVault,
+      clipboardEnabled,
+      clipboardPreviewDelayMs,
+      autoPasteOnSelect,
+      clipboardWindowMode,
+      clipboardCloseOnBlur,
+      clipboardCloseOnSpace,
+      clipboardClearSearchOnOpen,
+      panelScale,
+    ]
+  );
+
+  useEffect(() => {
+    if (!showChangePassword || recordingShortcut || recordingClipboardShortcut || recordingScreenshotShortcut) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowChangePassword(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showChangePassword, recordingShortcut, recordingClipboardShortcut, recordingScreenshotShortcut]);
 
   const loadCategories = async () => {
     try {
@@ -716,9 +772,48 @@ export default function ManagerPage() {
           )}
 
           {showChangePassword && (
-            <div className="modal-overlay">
+            <div
+              className="modal-overlay"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowChangePassword(false);
+                  setRecordingShortcut(false);
+                  setRecordingClipboardShortcut(false);
+                  setRecordingScreenshotShortcut(false);
+                }
+              }}
+            >
               <div className="modal-card settings-modal">
-                <div className="modal-title">{t("settingsTitle")}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <div className="modal-title" style={{ margin: 0 }}>{t("settingsTitle")}</div>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      fontSize: 20,
+                      cursor: "pointer",
+                      color: "var(--color-text-secondary)",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      lineHeight: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 0.15s ease",
+                    }}
+                    onClick={() => {
+                      setShowChangePassword(false);
+                      setRecordingShortcut(false);
+                      setRecordingClipboardShortcut(false);
+                      setRecordingScreenshotShortcut(false);
+                    }}
+                    title="Kapat (Esc)"
+                  >
+                    ✕
+                  </button>
+                </div>
 
                 {/* Görünüm & Dil Section */}
                 <div className="settings-section">
@@ -806,16 +901,7 @@ export default function ManagerPage() {
                         const nextSize = Number(e.target.value);
                         setClipboardPageSize(nextSize);
                         try {
-                          await updateClipboardSettings(
-                            nextSize,
-                            clipboardLockWithVault,
-                            clipboardEnabled,
-                            clipboardPreviewDelayMs,
-                            autoPasteOnSelect,
-                            clipboardWindowMode,
-                            clipboardCloseOnBlur,
-                            clipboardCloseOnSpace
-                          );
+                          await saveClipboardPrefs({ pageSize: nextSize });
                           showToast(`Kayıt limiti ${nextSize} olarak güncellendi`, "success");
                         } catch (err) {
                           showToast(String(err), "error");
@@ -848,16 +934,7 @@ export default function ManagerPage() {
                         onClick={async () => {
                           setClipboardWindowMode("popup");
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              "popup",
-                              clipboardCloseOnBlur,
-                              clipboardCloseOnSpace
-                            );
+                            await saveClipboardPrefs({ windowMode: "popup" });
                             showToast("Pano formatı: Açılır Pencere (Popup)", "success");
                           } catch (err) {
                             showToast(String(err), "error");
@@ -897,16 +974,7 @@ export default function ManagerPage() {
                         onClick={async () => {
                           setClipboardWindowMode("fullscreen");
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              "fullscreen",
-                              clipboardCloseOnBlur,
-                              clipboardCloseOnSpace
-                            );
+                            await saveClipboardPrefs({ windowMode: "fullscreen" });
                             showToast("Pano formatı: Tam Ekran (Fullscreen)", "success");
                           } catch (err) {
                             showToast(String(err), "error");
@@ -946,6 +1014,113 @@ export default function ManagerPage() {
                     </p>
                   </div>
 
+                  {/* Panel & Önizleme Boyutu (Küçük / Orta / Büyük) */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
+                      {t("settingsPanelScaleTitle")}
+                    </div>
+                    <p className="settings-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+                      {t("settingsPanelScaleHint")}
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+                      {[
+                        { id: "small" as const, label: t("settingsPanelScaleSmall"), desc: "85%" },
+                        { id: "medium" as const, label: t("settingsPanelScaleMedium"), desc: "100%" },
+                        { id: "large" as const, label: t("settingsPanelScaleLarge"), desc: "118%" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={async () => {
+                            setPanelScale(opt.id);
+                            try {
+                              await saveClipboardPrefs({ panelScale: opt.id });
+                              showToast(
+                                lang === "tr"
+                                  ? `Pano ölçeği ${opt.desc} olarak ayarlandı`
+                                  : `Panel scale set to ${opt.desc}`,
+                                "success"
+                              );
+                            } catch (err) {
+                              showToast(String(err), "error");
+                            }
+                          }}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            padding: "8px 6px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                            border: panelScale === opt.id ? "2px solid #0ea5e9" : "1px solid rgba(255, 255, 255, 0.12)",
+                            background: panelScale === opt.id ? "rgba(14, 165, 233, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                            color: "#fff",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <span style={{ fontWeight: 600, fontSize: 12.5 }}>{opt.label.split(" ")[0]}</span>
+                          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>{opt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Live Mini Preview Box */}
+                    <div
+                      style={{
+                        padding: panelScale === "small" ? "6px 10px" : panelScale === "large" ? "12px 14px" : "9px 12px",
+                        background: "rgba(255, 255, 255, 0.03)",
+                        border: "1px dashed rgba(255, 255, 255, 0.2)",
+                        borderRadius: panelScale === "small" ? 6 : panelScale === "large" ? 12 : 8,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: panelScale === "small" ? 8 : panelScale === "large" ? 14 : 10,
+                        transition: "all 0.2s ease-in-out",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: panelScale === "small" ? 22 : panelScale === "large" ? 34 : 28,
+                          height: panelScale === "small" ? 22 : panelScale === "large" ? 34 : 28,
+                          borderRadius: 6,
+                          background: "rgba(14, 165, 233, 0.25)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: panelScale === "small" ? 11 : panelScale === "large" ? 16 : 13,
+                        }}
+                      >
+                        📋
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: panelScale === "small" ? 11.5 : panelScale === "large" ? 14.5 : 13,
+                            fontWeight: 500,
+                            color: "var(--color-text-primary)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {t("settingsPanelScalePreview")} — https://example.com/api/v1/auth
+                        </div>
+                        <div
+                          style={{
+                            fontSize: panelScale === "small" ? 10 : panelScale === "large" ? 12 : 11,
+                            color: "var(--color-text-secondary)",
+                            marginTop: 2,
+                          }}
+                        >
+                          {panelScale === "small"
+                            ? (lang === "tr" ? "Kompakt Önizleme Boyutu (Küçük)" : "Compact Preview Scale (Small)")
+                            : panelScale === "large"
+                            ? (lang === "tr" ? "Geniş & Rahat Okuma Boyutu (Büyük)" : "Spacious Preview Scale (Large)")
+                            : (lang === "tr" ? "Dengeli Standart Önizleme Boyutu (Orta)" : "Standard Balanced Preview (Medium)")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
                       İçerik Detay Önizleme Gecikmesi (Mercek / Hover)
@@ -957,16 +1132,7 @@ export default function ManagerPage() {
                         const nextDelay = Number(e.target.value);
                         setClipboardPreviewDelayMs(nextDelay);
                         try {
-                          await updateClipboardSettings(
-                            clipboardPageSize,
-                            clipboardLockWithVault,
-                            clipboardEnabled,
-                            nextDelay,
-                            autoPasteOnSelect,
-                            clipboardWindowMode,
-                            clipboardCloseOnBlur,
-                            clipboardCloseOnSpace
-                          );
+                          await saveClipboardPrefs({ previewDelayMs: nextDelay });
                           showToast(
                             nextDelay === 0
                               ? "Önizleme gecikmesiz (anında) açılacak"
@@ -1001,16 +1167,7 @@ export default function ManagerPage() {
                           const nextLock = e.target.checked;
                           setClipboardLockWithVault(nextLock);
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              nextLock,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              clipboardWindowMode,
-                              clipboardCloseOnBlur,
-                              clipboardCloseOnSpace
-                            );
+                            await saveClipboardPrefs({ lockWithVault: nextLock });
                             showToast(
                               nextLock
                                 ? "Kasa kilitliyken pano geçmişi de kilitlenecek"
@@ -1033,16 +1190,7 @@ export default function ManagerPage() {
                           const nextEnabled = e.target.checked;
                           setClipboardEnabled(nextEnabled);
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              nextEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              clipboardWindowMode,
-                              clipboardCloseOnBlur,
-                              clipboardCloseOnSpace
-                            );
+                            await saveClipboardPrefs({ enabled: nextEnabled });
                             showToast(
                               nextEnabled ? "Pano geçmişi kaydı aktif" : "Pano geçmişi kaydı duraklatıldı",
                               "success"
@@ -1063,16 +1211,7 @@ export default function ManagerPage() {
                           const nextAuto = e.target.checked;
                           setAutoPasteOnSelect(nextAuto);
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              nextAuto,
-                              clipboardWindowMode,
-                              clipboardCloseOnBlur,
-                              clipboardCloseOnSpace
-                            );
+                            await saveClipboardPrefs({ autoPasteOnSelect: nextAuto });
                             showToast(
                               nextAuto
                                 ? (lang === "tr" ? "Otomatik yapıştırma aktif" : "Auto-paste enabled")
@@ -1098,16 +1237,7 @@ export default function ManagerPage() {
                           const nextBlur = e.target.checked;
                           setClipboardCloseOnBlur(nextBlur);
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              clipboardWindowMode,
-                              nextBlur,
-                              clipboardCloseOnSpace
-                            );
+                            await saveClipboardPrefs({ closeOnBlur: nextBlur });
                             showToast(
                               nextBlur
                                 ? "Pano dışına tıklandığında kapatma aktif"
@@ -1133,17 +1263,7 @@ export default function ManagerPage() {
                           const nextSpace = e.target.checked;
                           setClipboardCloseOnSpace(nextSpace);
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              clipboardWindowMode,
-                              clipboardCloseOnBlur,
-                              nextSpace,
-                              clipboardClearSearchOnOpen
-                            );
+                            await saveClipboardPrefs({ closeOnSpace: nextSpace });
                             showToast(
                               nextSpace
                                 ? "Space tuşu ile kapatma aktif"
@@ -1169,17 +1289,7 @@ export default function ManagerPage() {
                           const nextClear = e.target.checked;
                           setClipboardClearSearchOnOpen(nextClear);
                           try {
-                            await updateClipboardSettings(
-                              clipboardPageSize,
-                              clipboardLockWithVault,
-                              clipboardEnabled,
-                              clipboardPreviewDelayMs,
-                              autoPasteOnSelect,
-                              clipboardWindowMode,
-                              clipboardCloseOnBlur,
-                              clipboardCloseOnSpace,
-                              nextClear
-                            );
+                            await saveClipboardPrefs({ clearSearchOnOpen: nextClear });
                             showToast(
                               nextClear
                                 ? "Açılışta arama sıfırlama aktif"

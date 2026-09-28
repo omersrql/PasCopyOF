@@ -172,6 +172,7 @@ export default function ClipboardLauncherPage() {
   const [closeOnSpace, setCloseOnSpace] = useState<boolean>(true);
   const [clearSearchOnOpen, setClearSearchOnOpen] = useState<boolean>(true);
   const [pageSize, setPageSize] = useState<number>(100);
+  const [panelScale, setPanelScale] = useState<"small" | "medium" | "large">("medium");
 
   const unfilteredItemsRef = useRef<ClipboardItem[]>([]);
   const searchReqIdRef = useRef<number>(0);
@@ -209,6 +210,7 @@ export default function ClipboardLauncherPage() {
           if (typeof s.closeOnSpace === "boolean") setCloseOnSpace(s.closeOnSpace);
           if (typeof s.clearSearchOnOpen === "boolean") setClearSearchOnOpen(s.clearSearchOnOpen);
           if (typeof s.pageSize === "number" && s.pageSize > 0) setPageSize(s.pageSize);
+          if (s.panelScale) setPanelScale(s.panelScale);
         }
       })
       .catch(() => {});
@@ -554,6 +556,7 @@ export default function ClipboardLauncherPage() {
     <div
       ref={rootRef}
       className={`clip-launcher-root ${windowMode === "fullscreen" ? "fullscreen" : "popup"}`}
+      data-scale={panelScale}
       onClick={handleBackdropClick}
       onMouseLeave={handleRootMouseLeave}
     >

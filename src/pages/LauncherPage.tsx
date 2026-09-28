@@ -40,6 +40,7 @@ export default function LauncherPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [clearSearchOnOpen, setClearSearchOnOpen] = useState<boolean>(true);
+  const [panelScale, setPanelScale] = useState<"small" | "medium" | "large">("medium");
 
   const clearSearchOnOpenRef = useRef(clearSearchOnOpen);
   clearSearchOnOpenRef.current = clearSearchOnOpen;
@@ -85,6 +86,9 @@ export default function LauncherPage() {
           }
           if (typeof s.clearSearchOnOpen === "boolean") {
             setClearSearchOnOpen(s.clearSearchOnOpen);
+          }
+          if (s.panelScale) {
+            setPanelScale((s.panelScale as "small" | "medium" | "large") || "medium");
           }
         }
       })
@@ -323,7 +327,7 @@ export default function LauncherPage() {
   }
 
   return (
-    <div className="launcher-root" data-tauri-drag-region>
+    <div className="launcher-root" data-tauri-drag-region data-scale={panelScale}>
       {!unlocked && <MasterPasswordAuth onUnlocked={() => setUnlocked(true)} />}
 
       {unlocked && (

@@ -159,6 +159,12 @@ export const translations = {
     settingsClearSearchOnOpenHint: "Pano geçmişi veya şifre kasası panosu her açıldığında önceki arama terimini otomatik temizleyerek yeni aramaya hazır hale getirir.",
     settingsClipPageSizeTitle: "Ekrana Gelecek Kayıt Sayısı (Limit)",
     settingsClipPageSizeHint: "Pano geçmişi ekranında aynı anda listelenecek maksimum kayıt sayısını belirler.",
+    settingsPanelScaleTitle: "Pano Önizleme & Panel Boyutu",
+    settingsPanelScaleHint: "Ekrana açılan şifre ve pano geçmişi panellerinin ölçeğini ve önizleme boyutunu belirler.",
+    settingsPanelScaleSmall: "Küçük (%85)",
+    settingsPanelScaleMedium: "Orta / Standart (%100)",
+    settingsPanelScaleLarge: "Büyük (%118)",
+    settingsPanelScalePreview: "Kart Önizlemesi",
 
     // Clipboard Launcher Page
     clipSearchPlaceholder: "Pano geçmişinde ara...",
@@ -389,6 +395,12 @@ export const translations = {
     settingsClearSearchOnOpenHint: "Automatically clears previous search query when opening clipboard history or vault search so it's ready for a fresh search.",
     settingsClipPageSizeTitle: "Record Display Limit",
     settingsClipPageSizeHint: "Specifies maximum number of clipboard items loaded at once.",
+    settingsPanelScaleTitle: "Panel & Preview Scale",
+    settingsPanelScaleHint: "Adjusts the scale and preview sizing of both launcher and clipboard panels.",
+    settingsPanelScaleSmall: "Small (85%)",
+    settingsPanelScaleMedium: "Medium / Standard (100%)",
+    settingsPanelScaleLarge: "Large (118%)",
+    settingsPanelScalePreview: "Card Preview",
 
     // Clipboard Launcher Page
     clipSearchPlaceholder: "Search clipboard history...",
