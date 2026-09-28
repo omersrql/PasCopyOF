@@ -123,6 +123,7 @@ export default function ManagerPage() {
   const [clipboardWindowMode, setClipboardWindowMode] = useState<"popup" | "fullscreen">("popup");
   const [clipboardCloseOnBlur, setClipboardCloseOnBlur] = useState<boolean>(true);
   const [clipboardCloseOnSpace, setClipboardCloseOnSpace] = useState<boolean>(true);
+  const [clipboardClearSearchOnOpen, setClipboardClearSearchOnOpen] = useState<boolean>(true);
 
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
@@ -213,6 +214,7 @@ export default function ManagerPage() {
           windowMode: "popup" as const,
           closeOnBlur: true,
           closeOnSpace: true,
+          clearSearchOnOpen: true,
         })),
         getScreenshotSettings().catch(() => ({
           shortcut: "Ctrl+Shift+S",
@@ -235,6 +237,7 @@ export default function ManagerPage() {
         setClipboardWindowMode((clipSettings.windowMode as "popup" | "fullscreen") || "popup");
         setClipboardCloseOnBlur(clipSettings.closeOnBlur ?? true);
         setClipboardCloseOnSpace(clipSettings.closeOnSpace ?? true);
+        setClipboardClearSearchOnOpen(clipSettings.clearSearchOnOpen ?? true);
       }
       if (scSettings) {
         setScreenshotShortcutState(scSettings.shortcut);
@@ -1138,7 +1141,8 @@ export default function ManagerPage() {
                               autoPasteOnSelect,
                               clipboardWindowMode,
                               clipboardCloseOnBlur,
-                              nextSpace
+                              nextSpace,
+                              clipboardClearSearchOnOpen
                             );
                             showToast(
                               nextSpace
@@ -1155,6 +1159,42 @@ export default function ManagerPage() {
                     </label>
                     <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
                       {t("settingsClipCloseOnSpaceHint")}
+                    </p>
+
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={clipboardClearSearchOnOpen}
+                        onChange={async (e) => {
+                          const nextClear = e.target.checked;
+                          setClipboardClearSearchOnOpen(nextClear);
+                          try {
+                            await updateClipboardSettings(
+                              clipboardPageSize,
+                              clipboardLockWithVault,
+                              clipboardEnabled,
+                              clipboardPreviewDelayMs,
+                              autoPasteOnSelect,
+                              clipboardWindowMode,
+                              clipboardCloseOnBlur,
+                              clipboardCloseOnSpace,
+                              nextClear
+                            );
+                            showToast(
+                              nextClear
+                                ? "Açılışta arama sıfırlama aktif"
+                                : "Açılışta arama sıfırlama devre dışı",
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      />
+                      {t("settingsClearSearchOnOpen")}
+                    </label>
+                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
+                      {t("settingsClearSearchOnOpenHint")}
                     </p>
                   </div>
 

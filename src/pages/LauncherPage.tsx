@@ -21,6 +21,7 @@ import {
 import { getClipboardSettings } from "../api/clipboard";
 import type { CredentialSafe, Category } from "../api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { useApp } from "../context/AppContext";
 
 const SEARCH_DEBOUNCE = 80;
@@ -38,7 +39,10 @@ export default function LauncherPage() {
   const [clipboardCountdown, setClipboardCountdown] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [clearSearchOnOpen, setClearSearchOnOpen] = useState<boolean>(true);
 
+  const clearSearchOnOpenRef = useRef(clearSearchOnOpen);
+  clearSearchOnOpenRef.current = clearSearchOnOpen;
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,8 +79,13 @@ export default function LauncherPage() {
   const loadClipboardSettings = useCallback(() => {
     getClipboardSettings()
       .then((s) => {
-        if (s && typeof s.autoPasteOnSelect === "boolean") {
-          setAutoPasteOnSelect(s.autoPasteOnSelect);
+        if (s) {
+          if (typeof s.autoPasteOnSelect === "boolean") {
+            setAutoPasteOnSelect(s.autoPasteOnSelect);
+          }
+          if (typeof s.clearSearchOnOpen === "boolean") {
+            setClearSearchOnOpen(s.clearSearchOnOpen);
+          }
         }
       })
       .catch(() => {});
@@ -91,6 +100,17 @@ export default function LauncherPage() {
 
   useEffect(() => {
     loadClipboardSettings();
+
+    let unlistenSettings: (() => void) | null = null;
+    listen("clipboard-settings-updated", () => {
+      loadClipboardSettings();
+    }).then((fn) => {
+      unlistenSettings = fn;
+    });
+
+    return () => {
+      if (unlistenSettings) unlistenSettings();
+    };
   }, [loadClipboardSettings]);
 
   useEffect(() => {
@@ -102,7 +122,12 @@ export default function LauncherPage() {
         setTimeout(() => {
           searchRef.current?.focus();
         }, 10);
-        doSearch(query, selectedCategoryId);
+        if (clearSearchOnOpenRef.current) {
+          setQuery("");
+          doSearch("", selectedCategoryId);
+        } else {
+          doSearch(query, selectedCategoryId);
+        }
         loadCategories();
         loadClipboardSettings();
       }

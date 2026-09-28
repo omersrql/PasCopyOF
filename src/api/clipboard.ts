@@ -28,6 +28,7 @@ export interface ClipboardSettings {
   windowMode: "popup" | "fullscreen";
   closeOnBlur: boolean;
   closeOnSpace: boolean;
+  clearSearchOnOpen: boolean;
 }
 
 export type ClipboardFilterType = "all" | "text" | "image" | "files" | "pinned";
@@ -80,7 +81,8 @@ export async function updateClipboardSettings(
   autoPasteOnSelect?: boolean,
   windowMode?: "popup" | "fullscreen",
   closeOnBlur?: boolean,
-  closeOnSpace?: boolean
+  closeOnSpace?: boolean,
+  clearSearchOnOpen?: boolean
 ): Promise<void> {
   return invoke<void>("update_clipboard_settings", {
     pageSize,
@@ -91,6 +93,7 @@ export async function updateClipboardSettings(
     windowMode: windowMode || null,
     closeOnBlur: closeOnBlur !== undefined ? closeOnBlur : null,
     closeOnSpace: closeOnSpace !== undefined ? closeOnSpace : null,
+    clearSearchOnOpen: clearSearchOnOpen !== undefined ? clearSearchOnOpen : null,
   });
 }
 

@@ -51,6 +51,7 @@ pub struct AppState {
     pub clipboard_window_mode: String,
     pub clipboard_close_on_blur: bool,
     pub clipboard_close_on_space: bool,
+    pub clipboard_clear_search_on_open: bool,
     pub clipboard_clear_seconds: u64, // 0 = disabled (never clear)
     pub idle_timeout_minutes: u64, // 0 = disabled
     pub last_activity: Instant,
@@ -92,6 +93,7 @@ pub struct ClipboardSettings {
     pub window_mode: String,
     pub close_on_blur: bool,
     pub close_on_space: bool,
+    pub clear_search_on_open: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -478,10 +480,21 @@ fn show_launcher_window(app: &AppHandle) -> Result<(), String> {
             let m_pos = m.position();
             let m_size = m.size();
             let scale = m.scale_factor();
-            let win_w = 640.0;
-            let win_h = 480.0;
+
+            let m_log_w = m_size.width as f64 / scale;
+            let m_log_h = m_size.height as f64 / scale;
+
+            // Adaptively scale based on screen resolution:
+            // ~36% width (clamped 580 to 760) and ~46% height (clamped 440 to 620)
+            let win_w = (m_log_w * 0.36).clamp(580.0, 760.0);
+            let win_h = (m_log_h * 0.46).clamp(440.0, 620.0);
             let win_w_phys = win_w * scale;
             let win_h_phys = win_h * scale;
+
+            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                width: win_w,
+                height: win_h,
+            }));
 
             let target_x = m_pos.x as f64 + (m_size.width as f64 - win_w_phys) / 2.0;
             let target_y = m_pos.y as f64 + (m_size.height as f64 - win_h_phys) / 2.0;
@@ -545,8 +558,21 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
             let _ = window.set_focus();
         } else {
             let _ = window.unmaximize();
-            let window_width = 900.0;
-            let window_height = 500.0;
+
+            // Adaptively size the popup window based on the monitor resolution
+            let (window_width, window_height) = if let Some(ref m) = monitor {
+                let m_size = m.size();
+                let scale = m.scale_factor();
+                let m_log_w = m_size.width as f64 / scale;
+                let m_log_h = m_size.height as f64 / scale;
+
+                let w = (m_log_w * 0.50).clamp(780.0, 1020.0);
+                let h = (m_log_h * 0.52).clamp(440.0, 640.0);
+                (w, h)
+            } else {
+                (900.0, 500.0)
+            };
+
             let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
                 width: window_width,
                 height: window_height,
@@ -2183,6 +2209,7 @@ async fn get_clipboard_settings(
         window_mode: st.clipboard_window_mode.clone(),
         close_on_blur: st.clipboard_close_on_blur,
         close_on_space: st.clipboard_close_on_space,
+        clear_search_on_open: st.clipboard_clear_search_on_open,
     })
 }
 
@@ -2196,6 +2223,7 @@ async fn update_clipboard_settings(
     window_mode: Option<String>,
     close_on_blur: Option<bool>,
     close_on_space: Option<bool>,
+    clear_search_on_open: Option<bool>,
     app: AppHandle,
     state: State<'_, SafeAppState>,
 ) -> Result<(), String> {
@@ -2216,6 +2244,9 @@ async fn update_clipboard_settings(
     }
     if let Some(cos) = close_on_space {
         st.clipboard_close_on_space = cos;
+    }
+    if let Some(cso) = clear_search_on_open {
+        st.clipboard_clear_search_on_open = cso;
     }
 
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
@@ -2254,6 +2285,9 @@ async fn update_clipboard_settings(
     }
     if let Some(cos) = close_on_space {
         set_meta(&conn, "clipboard_close_on_space", if cos { "1" } else { "0" }).map_err(|e| e.to_string())?;
+    }
+    if let Some(cso) = clear_search_on_open {
+        set_meta(&conn, "clipboard_clear_search_on_open", if cso { "1" } else { "0" }).map_err(|e| e.to_string())?;
     }
 
     // Live update window if clipboard-launcher exists
@@ -2725,6 +2759,9 @@ pub fn run() {
             let clipboard_close_on_space = get_meta(&conn, "clipboard_close_on_space")
                 .map(|v| v != "0")
                 .unwrap_or(true);
+            let clipboard_clear_search_on_open = get_meta(&conn, "clipboard_clear_search_on_open")
+                .map(|v| v != "0")
+                .unwrap_or(true);
             let clipboard_clear_seconds = get_meta(&conn, "clipboard_clear_seconds")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15);
@@ -2749,6 +2786,7 @@ pub fn run() {
                 clipboard_window_mode,
                 clipboard_close_on_blur,
                 clipboard_close_on_space,
+                clipboard_clear_search_on_open,
                 clipboard_clear_seconds,
                 idle_timeout_minutes,
                 last_activity: Instant::now(),

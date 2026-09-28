@@ -17,7 +17,7 @@
         "url": "/",
         "width": 640,
         "height": 480,
-        "resizable": false,
+        "resizable": true,
         "decorations": false,
         "transparent": true,
         "center": true,

@@ -155,6 +155,8 @@ export const translations = {
     settingsClipCloseOnBlurHint: "Pano penceresi veya arka plan dışına tıklandığında panoyu otomatik olarak kapatır.",
     settingsClipCloseOnSpace: "Space (Boşluk) Tuşu ile Kapat",
     settingsClipCloseOnSpaceHint: "Arama alanı boşken veya pano listesi üzerindeyken Space tuşuna basıldığında panoyu anında kapatır.",
+    settingsClearSearchOnOpen: "Panolar Açıldığında Aramayı Sıfırla",
+    settingsClearSearchOnOpenHint: "Pano geçmişi veya şifre kasası panosu her açıldığında önceki arama terimini otomatik temizleyerek yeni aramaya hazır hale getirir.",
     settingsClipPageSizeTitle: "Ekrana Gelecek Kayıt Sayısı (Limit)",
     settingsClipPageSizeHint: "Pano geçmişi ekranında aynı anda listelenecek maksimum kayıt sayısını belirler.",
 
@@ -383,6 +385,8 @@ export const translations = {
     settingsClipCloseOnBlurHint: "Automatically dismisses the clipboard panel when clicking outside or switching focus.",
     settingsClipCloseOnSpace: "Close on Space Key",
     settingsClipCloseOnSpaceHint: "Instantly closes the panel when pressing the Space key (when search bar is empty or list is focused).",
+    settingsClearSearchOnOpen: "Reset Search on Panel Open",
+    settingsClearSearchOnOpenHint: "Automatically clears previous search query when opening clipboard history or vault search so it's ready for a fresh search.",
     settingsClipPageSizeTitle: "Record Display Limit",
     settingsClipPageSizeHint: "Specifies maximum number of clipboard items loaded at once.",
 

@@ -170,6 +170,7 @@ export default function ClipboardLauncherPage() {
   const [windowMode, setWindowMode] = useState<"popup" | "fullscreen">("popup");
   const [closeOnBlur, setCloseOnBlur] = useState<boolean>(true);
   const [closeOnSpace, setCloseOnSpace] = useState<boolean>(true);
+  const [clearSearchOnOpen, setClearSearchOnOpen] = useState<boolean>(true);
   const [pageSize, setPageSize] = useState<number>(100);
 
   const unfilteredItemsRef = useRef<ClipboardItem[]>([]);
@@ -182,6 +183,8 @@ export default function ClipboardLauncherPage() {
   closeOnBlurRef.current = closeOnBlur;
   const closeOnSpaceRef = useRef(closeOnSpace);
   closeOnSpaceRef.current = closeOnSpace;
+  const clearSearchOnOpenRef = useRef(clearSearchOnOpen);
+  clearSearchOnOpenRef.current = clearSearchOnOpen;
   const windowModeRef = useRef(windowMode);
   windowModeRef.current = windowMode;
   const pageSizeRef = useRef(pageSize);
@@ -204,6 +207,7 @@ export default function ClipboardLauncherPage() {
           if (s.windowMode) setWindowMode(s.windowMode);
           if (typeof s.closeOnBlur === "boolean") setCloseOnBlur(s.closeOnBlur);
           if (typeof s.closeOnSpace === "boolean") setCloseOnSpace(s.closeOnSpace);
+          if (typeof s.clearSearchOnOpen === "boolean") setClearSearchOnOpen(s.clearSearchOnOpen);
           if (typeof s.pageSize === "number" && s.pageSize > 0) setPageSize(s.pageSize);
         }
       })
@@ -244,7 +248,12 @@ export default function ClipboardLauncherPage() {
         if (!saveToVaultItemRef.current) {
           setTimeout(() => searchRef.current?.focus(), 20);
         }
-        fetchItems(query, filterType);
+        if (clearSearchOnOpenRef.current) {
+          setQuery("");
+          fetchItems("", filterType);
+        } else {
+          fetchItems(query, filterType);
+        }
         loadSettings();
       } else {
         setHoverPreviewItem(null);
