@@ -1,6 +1,6 @@
 /**
  * ClipboardLauncherPage.tsx — Spotlight/Raycast-style floating Clipboard History.
- * Enhanced with 2-second hover & linger detail preview popover.
+ * Enhanced with instant in-memory search, multi-column responsive grid, and linger preview popover.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -20,6 +20,142 @@ import { SaveToVaultModal } from "../components/SaveToVaultModal";
 import { useToast } from "../hooks/useToast";
 import { ToastContainer } from "../components/Toast";
 
+interface ClipboardItemCardProps {
+  item: ClipboardItem;
+  idx: number;
+  isSelected: boolean;
+  isJustCopied: boolean;
+  onCopy: (id: number) => void;
+  onMouseEnter: (item: ClipboardItem, idx: number) => void;
+  onMouseLeave: () => void;
+  onOpenSaveToVault: (e: React.MouseEvent, item: ClipboardItem) => void;
+  onTogglePin: (e: React.MouseEvent, id: number) => void;
+  onDelete: (e: React.MouseEvent, id: number) => void;
+  formatTime: (timeStr: string) => string;
+  saveToVaultHint: string;
+}
+
+const ClipboardItemCard = React.memo(function ClipboardItemCard({
+  item,
+  idx,
+  isSelected,
+  isJustCopied,
+  onCopy,
+  onMouseEnter,
+  onMouseLeave,
+  onOpenSaveToVault,
+  onTogglePin,
+  onDelete,
+  formatTime,
+  saveToVaultHint,
+}: ClipboardItemCardProps) {
+  return (
+    <div
+      className={`clip-item-card ${isSelected ? "selected" : ""} ${
+        item.isPinned ? "pinned" : ""
+      }`}
+      onClick={() => onCopy(item.id)}
+      onMouseEnter={() => onMouseEnter(item, idx)}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Left Type Icon / Thumbnail */}
+      <div className="clip-item-left">
+        {item.contentType === "image" && item.imageData ? (
+          <div className="clip-img-thumb-wrap">
+            <img
+              src={item.imageData}
+              alt="Önizleme"
+              className="clip-img-thumb"
+              loading="lazy"
+            />
+          </div>
+        ) : item.contentType === "files" ? (
+          <div className="clip-type-badge files">
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+        ) : (
+          <div className="clip-type-badge text">
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polyline points="4 7 4 4 20 4 20 7" />
+              <line x1="9" y1="20" x2="15" y2="20" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {/* Middle Content */}
+      <div className="clip-item-body">
+        <div className="clip-item-preview">
+          {item.preview || "(Boş içerik)"}
+        </div>
+        <div className="clip-item-meta">
+          <span className="clip-meta-time">
+            {formatTime(item.copiedAt)}
+          </span>
+          {item.charCount ? (
+            <span className="clip-meta-badge">
+              {item.charCount} karakter
+            </span>
+          ) : null}
+          {item.fileCount ? (
+            <span className="clip-meta-badge">
+              {item.fileCount} dosya
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Right Actions */}
+      <div className="clip-item-actions">
+        {(item.contentType === "text" || item.textContent) && (
+          <button
+            className="clip-action-btn vault-save"
+            title={saveToVaultHint}
+            onClick={(e) => onOpenSaveToVault(e, item)}
+          >
+            🔒
+          </button>
+        )}
+        <button
+          className={`clip-action-btn pin ${item.isPinned ? "active" : ""}`}
+          title={item.isPinned ? "Sabitlemeyi Kaldır" : "Sabitle"}
+          onClick={(e) => onTogglePin(e, item.id)}
+        >
+          ★
+        </button>
+        <button
+          className="clip-action-btn delete"
+          title="Sil (Del)"
+          onClick={(e) => onDelete(e, item.id)}
+        >
+          ✕
+        </button>
+      </div>
+
+      {isJustCopied && (
+        <div className="clip-copied-toast">Kopyalandı!</div>
+      )}
+    </div>
+  );
+});
+
 export default function ClipboardLauncherPage() {
   const { t, lang } = useApp();
   const [query, setQuery] = useState("");
@@ -36,6 +172,8 @@ export default function ClipboardLauncherPage() {
   const [closeOnSpace, setCloseOnSpace] = useState<boolean>(true);
   const [pageSize, setPageSize] = useState<number>(100);
 
+  const unfilteredItemsRef = useRef<ClipboardItem[]>([]);
+  const searchReqIdRef = useRef<number>(0);
   const hoverPreviewItemRef = useRef(hoverPreviewItem);
   hoverPreviewItemRef.current = hoverPreviewItem;
   const saveToVaultItemRef = useRef(saveToVaultItem);
@@ -73,16 +211,25 @@ export default function ClipboardLauncherPage() {
   }, []);
 
   const fetchItems = useCallback(async (q: string, filter: ClipboardFilterType) => {
+    const reqId = ++searchReqIdRef.current;
     try {
       setLoading(true);
       const data = await getClipboardHistory(q, filter, pageSizeRef.current);
+      if (reqId !== searchReqIdRef.current) return; // Stale request, drop!
       setItems(data);
+      if (!q.trim() && filter === "all") {
+        unfilteredItemsRef.current = data;
+      }
       setSelectedIndex(0);
       setHoverPreviewItem(null);
     } catch (err) {
-      console.error("Failed to load clipboard history:", err);
+      if (reqId === searchReqIdRef.current) {
+        console.error("Failed to load clipboard history:", err);
+      }
     } finally {
-      setLoading(false);
+      if (reqId === searchReqIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -131,15 +278,32 @@ export default function ClipboardLauncherPage() {
     };
   }, [fetchItems, filterType, query, loadSettings]);
 
-  // Handle Search Input Debounce
+  // Handle Search Input: Instant in-memory filter + 150ms debounced backend search
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setQuery(val);
     setHoverPreviewItem(null);
+
+    // Instant local filter for 0ms perceptible delay
+    const qLower = val.trim().toLowerCase();
+    if (qLower && unfilteredItemsRef.current.length > 0) {
+      const instant = unfilteredItemsRef.current.filter((item) => {
+        const p = item.preview?.toLowerCase() || "";
+        const t = item.textContent?.toLowerCase() || "";
+        const f = item.filePaths?.join(" ").toLowerCase() || "";
+        return p.includes(qLower) || t.includes(qLower) || f.includes(qLower);
+      });
+      setItems(instant);
+      setSelectedIndex(0);
+    } else if (!qLower && unfilteredItemsRef.current.length > 0) {
+      setItems(unfilteredItemsRef.current);
+      setSelectedIndex(0);
+    }
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchItems(val, filterType);
-    }, 120);
+    }, 150);
   };
 
   const handleFilterChange = (f: ClipboardFilterType) => {
@@ -148,17 +312,17 @@ export default function ClipboardLauncherPage() {
     fetchItems(query, f);
   };
 
-  const handleOpenSaveToVault = (e: React.MouseEvent | null, item: ClipboardItem) => {
+  const handleOpenSaveToVault = useCallback((e: React.MouseEvent | null, item: ClipboardItem) => {
     if (e) e.stopPropagation();
     setHoverPreviewItem(null);
     setSaveToVaultItem(item);
-  };
+  }, []);
 
   const handleSaveSuccess = (savedKeyName: string) => {
     showToast(t("clipVaultSavedSuccess", { name: savedKeyName }), "success");
   };
 
-  const handleCopy = async (id: number) => {
+  const handleCopy = useCallback(async (id: number) => {
     try {
       setCopiedId(id);
       setHoverPreviewItem(null);
@@ -166,33 +330,35 @@ export default function ClipboardLauncherPage() {
     } catch (err) {
       console.error("Failed to copy item:", err);
     }
-  };
+  }, []);
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
+  const handleDelete = useCallback(async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
       setHoverPreviewItem(null);
       await deleteHistoryItem(id);
       setItems((prev) => prev.filter((it) => it.id !== id));
-      if (selectedIndex >= items.length - 1) {
-        setSelectedIndex(Math.max(0, items.length - 2));
-      }
+      unfilteredItemsRef.current = unfilteredItemsRef.current.filter((it) => it.id !== id);
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
     } catch (err) {
       console.error("Failed to delete item:", err);
     }
-  };
+  }, []);
 
-  const handleTogglePin = async (e: React.MouseEvent, id: number) => {
+  const handleTogglePin = useCallback(async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
       const isPinned = await togglePinHistory(id);
       setItems((prev) =>
         prev.map((it) => (it.id === id ? { ...it, isPinned } : it))
       );
+      unfilteredItemsRef.current = unfilteredItemsRef.current.map((it) =>
+        it.id === id ? { ...it, isPinned } : it
+      );
     } catch (err) {
       console.error("Failed to pin item:", err);
     }
-  };
+  }, []);
 
   const handleClearAll = async () => {
     try {
@@ -204,7 +370,7 @@ export default function ClipboardLauncherPage() {
     }
   };
 
-  // Keyboard navigation & lingering 2s preview
+  // Keyboard navigation with multi-column grid awareness
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // If modal is open, let modal handle keyboard events
@@ -238,12 +404,31 @@ export default function ClipboardLauncherPage() {
         return;
       }
 
+      // Calculate grid column count in fullscreen mode
+      const getColumnsCount = () => {
+        if (windowModeRef.current !== "fullscreen" || !listRef.current) return 1;
+        const firstCard = listRef.current.querySelector(".clip-item-card") as HTMLElement | null;
+        if (!firstCard) return 1;
+        const cardWidth = firstCard.offsetWidth;
+        if (cardWidth <= 0) return 1;
+        const containerWidth = listRef.current.clientWidth;
+        return Math.max(1, Math.round(containerWidth / (cardWidth + 10)));
+      };
+
+      const cols = getColumnsCount();
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev < items.length - 1 ? prev + 1 : prev));
+        setSelectedIndex((prev) => Math.min(items.length - 1, prev + cols));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+        setSelectedIndex((prev) => Math.max(0, prev - cols));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
         if (items[selectedIndex]) {
@@ -261,7 +446,7 @@ export default function ClipboardLauncherPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [items, selectedIndex, query, filterType, fetchItems]);
+  }, [items, selectedIndex, query, filterType, fetchItems, handleCopy, handleOpenSaveToVault]);
 
   // Scroll selected into view & keyboard linger preview
   useEffect(() => {
@@ -279,10 +464,8 @@ export default function ClipboardLauncherPage() {
 
     if (items[selectedIndex]) {
       if (hoverPreviewItemRef.current !== null) {
-        // Preview session already active: update immediately
         setHoverPreviewItem(items[selectedIndex]);
       } else {
-        // First open: wait configured delay
         if (previewDelayMs <= 0) {
           setHoverPreviewItem(items[selectedIndex]);
         } else {
@@ -298,8 +481,8 @@ export default function ClipboardLauncherPage() {
     };
   }, [selectedIndex, items, previewDelayMs]);
 
-  // Mouse hover handlers (first open waits previewDelayMs, once open updates immediately)
-  const handleItemMouseEnter = (item: ClipboardItem, idx: number) => {
+  // Mouse hover handlers
+  const handleItemMouseEnter = useCallback((item: ClipboardItem, idx: number) => {
     setSelectedIndex(idx);
     if (hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current);
@@ -307,10 +490,8 @@ export default function ClipboardLauncherPage() {
     }
 
     if (hoverPreviewItemRef.current !== null) {
-      // Preview session is already open: update immediately without waiting!
       setHoverPreviewItem(item);
     } else {
-      // First open: wait previewDelayMs
       if (previewDelayMs <= 0) {
         setHoverPreviewItem(item);
       } else {
@@ -319,27 +500,25 @@ export default function ClipboardLauncherPage() {
         }, previewDelayMs);
       }
     }
-  };
+  }, [previewDelayMs]);
 
-  const handleItemMouseLeave = () => {
-    // If preview hasn't opened yet, cancel the pending timer so it doesn't open after leaving
+  const handleItemMouseLeave = useCallback(() => {
     if (hoverPreviewItemRef.current === null && hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
     }
-  };
+  }, []);
 
   const handleRootMouseLeave = () => {
     if (hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
     }
-    // Ending the session when leaving the window
     setHoverPreviewItem(null);
   };
 
   // Format relative timestamp
-  const formatTime = (timeStr: string) => {
+  const formatTime = useCallback((timeStr: string) => {
     try {
       const date = new Date(timeStr.replace(" ", "T"));
       const diffMs = Date.now() - date.getTime();
@@ -353,7 +532,7 @@ export default function ClipboardLauncherPage() {
     } catch {
       return timeStr;
     }
-  };
+  }, [t]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === rootRef.current && closeOnBlurRef.current) {
@@ -369,9 +548,9 @@ export default function ClipboardLauncherPage() {
       onClick={handleBackdropClick}
       onMouseLeave={handleRootMouseLeave}
     >
-      {/* Main List Box */}
-      <div className="clip-launcher-main" onClick={(e) => e.stopPropagation()}>
-        {/* Search Header */}
+      {/* Main Launcher Window / Grid Container */}
+      <div className="clip-launcher-main">
+        {/* Header Search & Tabs */}
         <div className="clip-launcher-header">
           <div className="clip-launcher-search-box">
             <svg
@@ -398,6 +577,10 @@ export default function ClipboardLauncherPage() {
                 className="clip-clear-btn"
                 onClick={() => {
                   setQuery("");
+                  if (unfilteredItemsRef.current.length > 0) {
+                    setItems(unfilteredItemsRef.current);
+                    setSelectedIndex(0);
+                  }
                   fetchItems("", filterType);
                   searchRef.current?.focus();
                 }}
@@ -429,7 +612,7 @@ export default function ClipboardLauncherPage() {
           </div>
         </div>
 
-        {/* List Content */}
+        {/* List / Grid Content */}
         <div className="clip-launcher-list" ref={listRef}>
           {items.length === 0 ? (
             <div className="clip-empty-state">
@@ -444,128 +627,30 @@ export default function ClipboardLauncherPage() {
               </div>
             </div>
           ) : (
-            items.map((item, idx) => {
-              const isSelected = idx === selectedIndex;
-              const isJustCopied = copiedId === item.id;
-
-              return (
-                <div
-                  key={item.id}
-                  className={`clip-item-card ${isSelected ? "selected" : ""} ${
-                    item.isPinned ? "pinned" : ""
-                  }`}
-                  onClick={() => handleCopy(item.id)}
-                  onMouseEnter={() => handleItemMouseEnter(item, idx)}
-                  onMouseLeave={handleItemMouseLeave}
-                >
-                  {/* Left Type Icon / Thumbnail */}
-                  <div className="clip-item-left">
-                    {item.contentType === "image" && item.imageData ? (
-                      <div className="clip-img-thumb-wrap">
-                        <img
-                          src={item.imageData}
-                          alt="Önizleme"
-                          className="clip-img-thumb"
-                        />
-                      </div>
-                    ) : item.contentType === "files" ? (
-                      <div className="clip-type-badge files">
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="18"
-                          height="18"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg>
-                      </div>
-                    ) : (
-                      <div className="clip-type-badge text">
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="18"
-                          height="18"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <polyline points="4 7 4 4 20 4 20 7" />
-                          <line x1="9" y1="20" x2="15" y2="20" />
-                          <line x1="12" y1="4" x2="12" y2="20" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Middle Content */}
-                  <div className="clip-item-body">
-                    <div className="clip-item-preview">
-                      {item.preview || "(Boş içerik)"}
-                    </div>
-                    <div className="clip-item-meta">
-                      <span className="clip-meta-time">
-                        {formatTime(item.copiedAt)}
-                      </span>
-                      {item.charCount && (
-                        <span className="clip-meta-badge">
-                          {item.charCount} karakter
-                        </span>
-                      )}
-                      {item.fileCount && (
-                        <span className="clip-meta-badge">
-                          {item.fileCount} dosya
-                        </span>
-                      )}
-                      {item.imageDimensions && (
-                        <span className="clip-meta-badge">
-                          {item.imageDimensions}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right Actions */}
-                  <div className="clip-item-actions">
-                    {(item.contentType === "text" || item.textContent) && (
-                      <button
-                        className="clip-action-btn vault-save"
-                        title={t("clipSaveToVaultHint")}
-                        onClick={(e) => handleOpenSaveToVault(e, item)}
-                      >
-                        🔒
-                      </button>
-                    )}
-                    <button
-                      className={`clip-action-btn pin ${item.isPinned ? "active" : ""}`}
-                      title={item.isPinned ? "Sabitlemeyi Kaldır" : "Sabitle"}
-                      onClick={(e) => handleTogglePin(e, item.id)}
-                    >
-                      ★
-                    </button>
-                    <button
-                      className="clip-action-btn delete"
-                      title="Sil (Del)"
-                      onClick={(e) => handleDelete(e, item.id)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {isJustCopied && (
-                    <div className="clip-copied-toast">Kopyalandı!</div>
-                  )}
-                </div>
-              );
-            })
+            items.map((item, idx) => (
+              <ClipboardItemCard
+                key={item.id}
+                item={item}
+                idx={idx}
+                isSelected={idx === selectedIndex}
+                isJustCopied={copiedId === item.id}
+                onCopy={handleCopy}
+                onMouseEnter={handleItemMouseEnter}
+                onMouseLeave={handleItemMouseLeave}
+                onOpenSaveToVault={handleOpenSaveToVault}
+                onTogglePin={handleTogglePin}
+                onDelete={handleDelete}
+                formatTime={formatTime}
+                saveToVaultHint={t("clipSaveToVaultHint")}
+              />
+            ))
           )}
         </div>
 
         {/* Footer / Status bar */}
         <div className="clip-launcher-footer">
           <div className="clip-footer-hints">
-            <span className="clip-kbd">↑↓</span> Gezin
+            <span className="clip-kbd">{windowMode === "fullscreen" ? "↑↓←→" : "↑↓"}</span> Gezin
             <span className="clip-kbd">↵</span> Kopyala
             <span className="clip-kbd">Ctrl+S</span> Kasaya
             <span className="clip-kbd">Del</span> Sil
@@ -586,7 +671,7 @@ export default function ClipboardLauncherPage() {
         </div>
       </div>
 
-      {/* Floating Detail Preview Popover (Opens after 2-second hover or linger) */}
+      {/* Floating / Docked Detail Preview Popover */}
       {hoverPreviewItem && (
         <div className="clip-preview-popover" onClick={(e) => e.stopPropagation()}>
           {/* Popover Header */}
@@ -639,11 +724,11 @@ export default function ClipboardLauncherPage() {
 
             {/* Meta Statistics */}
             <div className="clip-preview-stats">
-              {hoverPreviewItem.charCount && (
+              {hoverPreviewItem.charCount ? (
                 <span className="clip-preview-stat-item">
                   <strong>{hoverPreviewItem.charCount.toLocaleString(lang === "tr" ? "tr-TR" : "en-US")}</strong> {t("clipStatsChars")}
                 </span>
-              )}
+              ) : null}
               {hoverPreviewItem.textContent && (
                 <>
                   <span className="clip-preview-stat-item">
@@ -657,11 +742,11 @@ export default function ClipboardLauncherPage() {
                   </span>
                 </>
               )}
-              {hoverPreviewItem.fileCount && (
+              {hoverPreviewItem.fileCount ? (
                 <span className="clip-preview-stat-item">
                   <strong>{hoverPreviewItem.fileCount}</strong> {t("clipStatsFiles")}
                 </span>
-              )}
+              ) : null}
               {hoverPreviewItem.imageDimensions && (
                 <span className="clip-preview-stat-item">
                   <strong>{hoverPreviewItem.imageDimensions}</strong>

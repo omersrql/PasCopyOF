@@ -1,8 +1,9 @@
 // PasCopyOf - Password Vault Backend
 // Handles: Database, Encryption/Decryption, Clipboard, Global Hotkey, Backup, Idle Lock
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -55,6 +56,7 @@ pub struct AppState {
     pub last_activity: Instant,
     pub last_vault_password: Option<String>,
     pub ignore_clipboard_change: bool,
+    pub clipboard_image_cache: Arc<Mutex<HashMap<String, String>>>,
 }
 
 pub struct SafeAppState(pub Mutex<AppState>);
@@ -230,7 +232,9 @@ fn init_db_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_clipboard_type ON clipboard_history (content_type);
         CREATE INDEX IF NOT EXISTS idx_clipboard_copied_at ON clipboard_history (copied_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_clipboard_pinned ON clipboard_history (is_pinned);",
+        CREATE INDEX IF NOT EXISTS idx_clipboard_pinned ON clipboard_history (is_pinned);
+        CREATE INDEX IF NOT EXISTS idx_clipboard_pinned_copied ON clipboard_history (is_pinned DESC, copied_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_clipboard_type_pinned ON clipboard_history (content_type, is_pinned DESC, copied_at DESC);",
     )?;
 
     let table_info: Vec<String> = {
@@ -1850,15 +1854,15 @@ async fn get_clipboard_history(
     limit: Option<u32>,
     state: State<'_, SafeAppState>,
 ) -> Result<Vec<ClipboardItem>, String> {
-    let (db_path, default_limit) = {
+    let (db_path, default_limit, image_cache) = {
         let st = state.0.lock().map_err(|e| e.to_string())?;
-        (st.db_path.clone(), st.clipboard_page_size)
+        (st.db_path.clone(), st.clipboard_page_size, Arc::clone(&st.clipboard_image_cache))
     };
 
     let take_limit = limit.unwrap_or(default_limit).max(1);
     let conn = open_db(&db_path).map_err(|e| e.to_string())?;
 
-    let q = query.trim().to_lowercase();
+    let q = query.trim();
     let filter = filter_type.as_deref().unwrap_or("all");
 
     let mut sql = "SELECT id, content_type, text_content, image_path, file_paths, preview, char_count, file_count, image_dimensions, copied_at, is_pinned FROM clipboard_history WHERE 1=1".to_string();
@@ -1866,7 +1870,7 @@ async fn get_clipboard_history(
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
     if !q.is_empty() {
-        sql.push_str(" AND (lower(preview) LIKE ? OR lower(coalesce(text_content, '')) LIKE ? OR lower(coalesce(file_paths, '')) LIKE ?)");
+        sql.push_str(" AND (preview LIKE ? OR text_content LIKE ? OR file_paths LIKE ?)");
         let pattern = format!("%{q}%");
         params_vec.push(Box::new(pattern.clone()));
         params_vec.push(Box::new(pattern.clone()));
@@ -1913,8 +1917,16 @@ async fn get_clipboard_history(
 
             let image_data = if content_type == "image" {
                 if let Some(ref path) = image_path {
-                    if let Ok(bytes) = std::fs::read(path) {
-                        Some(format!("data:image/png;base64,{}", B64.encode(&bytes)))
+                    let mut cache = image_cache.lock().unwrap();
+                    if let Some(cached) = cache.get(path) {
+                        Some(cached.clone())
+                    } else if let Ok(bytes) = std::fs::read(path) {
+                        let data = format!("data:image/png;base64,{}", B64.encode(&bytes));
+                        if cache.len() > 150 {
+                            cache.clear();
+                        }
+                        cache.insert(path.clone(), data.clone());
+                        Some(data)
                     } else {
                         None
                     }
@@ -2051,7 +2063,12 @@ async fn delete_history_item(
         .ok()
         .flatten();
     if let Some(path) = img_path {
-        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(&path);
+        if let Ok(st) = state.0.lock() {
+            if let Ok(mut cache) = st.clipboard_image_cache.lock() {
+                cache.remove(&path);
+            }
+        }
     }
     conn.execute(
         "DELETE FROM clipboard_history WHERE id = ?1",
@@ -2083,6 +2100,11 @@ async fn clear_clipboard_history(
     }
     conn.execute("DELETE FROM clipboard_history WHERE is_pinned = 0", [])
         .map_err(|e| e.to_string())?;
+    if let Ok(st) = state.0.lock() {
+        if let Ok(mut cache) = st.clipboard_image_cache.lock() {
+            cache.clear();
+        }
+    }
     let _ = app.emit("clipboard-updated", ());
     Ok(())
 }
@@ -2732,6 +2754,7 @@ pub fn run() {
                 last_activity: Instant::now(),
                 last_vault_password: None,
                 ignore_clipboard_change: false,
+                clipboard_image_cache: Arc::new(Mutex::new(HashMap::new())),
             })));
 
             #[cfg(target_os = "windows")]
