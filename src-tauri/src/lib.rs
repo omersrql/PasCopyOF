@@ -29,6 +29,7 @@ const DEFAULT_LAUNCHER_SHORTCUT: &str = "Ctrl+Shift+Space";
 const DEFAULT_CLIPBOARD_SHORTCUT: &str = "Ctrl+Shift+V";
 const DEFAULT_SCREENSHOT_SHORTCUT: &str = "Ctrl+Shift+S";
 const DEFAULT_TIMER_WIDGET_SHORTCUT: &str = "Ctrl+Shift+T";
+const DEFAULT_TASKS_SHORTCUT: &str = "Ctrl+Shift+P";
 const DEFAULT_IDLE_TIMEOUT_MINUTES: u64 = 15;
 const DEFAULT_CLIPBOARD_PAGE_SIZE: u32 = 50;
 const VERIFY_MESSAGE: &str = "pascopyof-verify-ok";
@@ -44,6 +45,7 @@ pub struct AppState {
     pub clipboard_shortcut: String,
     pub screenshot_shortcut: String,
     pub timer_widget_shortcut: String,
+    pub tasks_shortcut: String,
     pub screenshot_notification_enabled: bool,
     pub screenshot_save_dir: String,
     pub default_screenshot_save_dir: String,
@@ -930,6 +932,61 @@ fn register_timer_widget_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(
     Ok(())
 }
 
+fn open_tasks_window_internal(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("manager") {
+        let is_vis = window.is_visible().unwrap_or(false);
+        let is_min = window.is_minimized().unwrap_or(false);
+        let is_foc = window.is_focused().unwrap_or(false);
+
+        if is_vis && !is_min && is_foc {
+            let _ = window.minimize();
+        } else {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+            let _ = app.emit("open-task-in-manager", serde_json::json!({ "tab": "tasks" }));
+        }
+    } else {
+        WebviewWindowBuilder::new(
+            app,
+            "manager",
+            WebviewUrl::App("index.html#/manager".into()),
+        )
+        .title("PasCopyOf - Vault Manager")
+        .inner_size(1000.0, 640.0)
+        .min_inner_size(860.0, 520.0)
+        .center()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+        let app_clone = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let _ = app_clone.emit("open-task-in-manager", serde_json::json!({ "tab": "tasks" }));
+        });
+    }
+    Ok(())
+}
+
+fn register_tasks_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut: Shortcut = shortcut_str
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = open_tasks_window_internal(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 struct AppClipboardHandler {
     app_handle: AppHandle,
     db_path: PathBuf,
@@ -1130,11 +1187,13 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         MenuItem::with_id(app, "show_clipboard", "Show Clipboard History", true, None::<&str>)?;
     let take_screenshot =
         MenuItem::with_id(app, "take_screenshot", "Capture Screenshot", true, None::<&str>)?;
+    let open_tasks =
+        MenuItem::with_id(app, "open_tasks", "Görevler & Odak Takibi (Tasks)", true, None::<&str>)?;
     let open_manager =
         MenuItem::with_id(app, "open_manager", "Open Manager", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit PasCopyOf", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_launcher, &show_clipboard, &take_screenshot, &open_manager, &separator, &quit])?;
+    let menu = Menu::with_items(app, &[&show_launcher, &show_clipboard, &take_screenshot, &open_tasks, &open_manager, &separator, &quit])?;
 
     let icon = app
         .default_window_icon()
@@ -1155,6 +1214,9 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
             "take_screenshot" => {
                 let _ = trigger_screenshot_capture(app);
+            }
+            "open_tasks" => {
+                let _ = open_tasks_window_internal(app);
             }
             "open_manager" => {
                 if let Some(window) = app.get_webview_window("manager") {
@@ -3514,6 +3576,55 @@ async fn set_timer_widget_shortcut(
 }
 
 #[tauri::command]
+async fn open_tasks_window(app: AppHandle) -> Result<(), String> {
+    open_tasks_window_internal(&app)
+}
+
+#[tauri::command]
+async fn get_tasks_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.tasks_shortcut.clone())
+}
+
+#[tauri::command]
+async fn set_tasks_shortcut(
+    shortcut: String,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let shortcut = shortcut.trim().to_string();
+    if shortcut.is_empty() {
+        return Err("Shortcut cannot be empty".into());
+    }
+    shortcut
+        .parse::<Shortcut>()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+
+    let old_shortcut = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.tasks_shortcut.clone()
+    };
+    if shortcut == old_shortcut {
+        return Ok(());
+    }
+    if let Ok(old) = old_shortcut.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old);
+    }
+    if let Err(err) = register_tasks_hotkey(&app, &shortcut) {
+        let _ = register_tasks_hotkey(&app, &old_shortcut);
+        return Err(err);
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "tasks_shortcut", &shortcut).map_err(|e| e.to_string())?;
+    st.tasks_shortcut = shortcut;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_timer_status(
     state: State<'_, SafeAppState>,
 ) -> Result<TimerStatusInfo, String> {
@@ -3961,6 +4072,8 @@ pub fn run() {
                 .unwrap_or_else(|| DEFAULT_SCREENSHOT_SHORTCUT.to_string());
             let timer_widget_shortcut = get_meta(&conn, "timer_widget_shortcut")
                 .unwrap_or_else(|| DEFAULT_TIMER_WIDGET_SHORTCUT.to_string());
+            let tasks_shortcut = get_meta(&conn, "tasks_shortcut")
+                .unwrap_or_else(|| DEFAULT_TASKS_SHORTCUT.to_string());
             let screenshot_notification_enabled = get_meta(&conn, "screenshot_notification_enabled")
                 .map(|v| v != "0")
                 .unwrap_or(true);
@@ -4015,6 +4128,7 @@ pub fn run() {
                 clipboard_shortcut: clipboard_shortcut.clone(),
                 screenshot_shortcut: screenshot_shortcut.clone(),
                 timer_widget_shortcut: timer_widget_shortcut.clone(),
+                tasks_shortcut: tasks_shortcut.clone(),
                 screenshot_notification_enabled,
                 screenshot_save_dir,
                 default_screenshot_save_dir,
@@ -4055,6 +4169,9 @@ pub fn run() {
             }
             if let Err(e) = register_timer_widget_hotkey(app.handle(), &timer_widget_shortcut) {
                 eprintln!("Failed to register timer widget hotkey: {e}");
+            }
+            if let Err(e) = register_tasks_hotkey(app.handle(), &tasks_shortcut) {
+                eprintln!("Failed to register tasks hotkey: {e}");
             }
 
             // Start clipboard watcher background thread
@@ -4267,6 +4384,9 @@ pub fn run() {
             get_timer_widget_shortcut,
             set_timer_widget_shortcut,
             get_timer_status,
+            open_tasks_window,
+            get_tasks_shortcut,
+            set_tasks_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

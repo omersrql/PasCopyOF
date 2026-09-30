@@ -71,6 +71,18 @@ export async function toggleTimerWidget(): Promise<void> {
   await invoke("toggle_timer_widget");
 }
 
+export async function openTasksWindow(): Promise<void> {
+  await invoke("open_tasks_window");
+}
+
+export async function getTasksShortcut(): Promise<string> {
+  return await invoke<string>("get_tasks_shortcut");
+}
+
+export async function setTasksShortcut(shortcut: string): Promise<void> {
+  await invoke("set_tasks_shortcut", { shortcut });
+}
+
 export async function getTimerWidgetShortcut(): Promise<string> {
   return await invoke<string>("get_timer_widget_shortcut");
 }

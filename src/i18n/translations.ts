@@ -274,6 +274,9 @@ export const translations = {
     settingsTimerWidgetShortcutTitle: "Yüzen Sayaç Kısayolu",
     settingsTimerWidgetShortcutHint: "Yüzen mini odak sayacını tek bir tuş kombinasyonuyla ekranda gösterin veya gizleyin (aç/kapa).",
     settingsTimerWidgetShortcut: "Sayaç Göster / Gizle Kısayolu",
+    settingsTasksShortcutTitle: "Görev Planlayıcı & Geçmiş Kısayolu",
+    settingsTasksShortcutHint: "Görev planlayıcı, günlük çalışma geçmişi ve iş takibi penceresini doğrudan açmak / gizlemek için kısayol tuşu.",
+    settingsTasksShortcut: "Görev Penceresini Açma Kısayolu",
   },
 
   en: {
@@ -547,6 +550,9 @@ export const translations = {
     settingsTimerWidgetShortcutTitle: "Floating Timer Widget Shortcut",
     settingsTimerWidgetShortcutHint: "Quickly toggle the floating mini focus timer widget (show / hide) with a single key combination.",
     settingsTimerWidgetShortcut: "Timer Toggle Shortcut",
+    settingsTasksShortcutTitle: "Tasks & Focus Planner Shortcut",
+    settingsTasksShortcutHint: "Shortcut to directly open and toggle the Tasks Planner, worklog history, and focus window.",
+    settingsTasksShortcut: "Open Tasks Window Shortcut",
   },
 } as const;
 

@@ -118,6 +118,8 @@
 | **Vault Quick Launcher** | `Ctrl + Shift + Space` | ✅ Yes (Manager → Settings) |
 | **Clipboard History** | `Ctrl + Shift + V` | ✅ Yes (Manager → Settings) |
 | **Screenshot & Markup** | `Ctrl + Shift + S` | ✅ Yes (Manager → Settings) |
+| **Floating Timer Widget** | `Ctrl + Shift + T` | ✅ Yes (Manager → Settings) |
+| **Tasks & Focus Planner** | `Ctrl + Shift + P` | ✅ Yes (Manager → Settings) |
 
 *All shortcuts can be remapped directly in the application by pressing your desired key combination.*
 
