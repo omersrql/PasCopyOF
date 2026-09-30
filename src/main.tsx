@@ -6,6 +6,7 @@ import ManagerPage from "./pages/ManagerPage.tsx";
 import ClipboardLauncherPage from "./pages/ClipboardLauncherPage.tsx";
 import ScreenshotOverlayPage from "./pages/ScreenshotOverlayPage.tsx";
 import FloatingTimerWidgetPage from "./pages/FloatingTimerWidgetPage.tsx";
+import QuickTaskModalPage from "./pages/QuickTaskModalPage.tsx";
 import { AppProvider } from "./context/AppContext.tsx";
 import "./index.css";
 
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/clipboard" element={<ClipboardLauncherPage />} />
           <Route path="/screenshot" element={<ScreenshotOverlayPage />} />
           <Route path="/timer-widget" element={<FloatingTimerWidgetPage />} />
+          <Route path="/quick-task" element={<QuickTaskModalPage />} />
         </Routes>
       </HashRouter>
     </AppProvider>

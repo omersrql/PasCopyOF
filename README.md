@@ -54,6 +54,10 @@
   - **Lock Screen (`Win + L`)**: Instantly detects workstation lock and pauses the timer immediately so idle lock time is never falsely logged.
   - **1-Minute Idle Detection**: If no keyboard or mouse movement is detected for 60 seconds, the timer auto-pauses and deducts the 60s idle gap from effort logs.
   - **Auto-Resume on Return**: The moment you unlock the PC or move your mouse, the timer automatically resumes right where you left off with a welcoming notification.
+- **⚡ Quick Task Creator Popup (`Ctrl + Shift + N`)**:
+  - Global floating popup that appears instantly anywhere over whatever app you're using.
+  - Simply type what you're working on and press `Enter` to create the task and immediately start tracking time on the floating mini timer widget.
+  - Options for priority badges, routine recurrence, and save-only mode (`Ctrl + Enter`).
 - **📋 "What Did I Do Today?" One-Click Markdown Export**:
   - Generates and copies a clean, professional Markdown daily work summary directly to your clipboard:
     ```markdown
@@ -120,6 +124,7 @@
 | **Screenshot & Markup** | `Ctrl + Shift + S` | ✅ Yes (Manager → Settings) |
 | **Floating Timer Widget** | `Ctrl + Shift + T` | ✅ Yes (Manager → Settings) |
 | **Tasks & Focus Planner** | `Ctrl + Shift + P` | ✅ Yes (Manager → Settings) |
+| **⚡ Quick Task Creator** | `Ctrl + Shift + N` | ✅ Yes (Manager → Settings) |
 
 *All shortcuts can be remapped directly in the application by pressing your desired key combination.*
 

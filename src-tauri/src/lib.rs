@@ -30,6 +30,7 @@ const DEFAULT_CLIPBOARD_SHORTCUT: &str = "Ctrl+Shift+V";
 const DEFAULT_SCREENSHOT_SHORTCUT: &str = "Ctrl+Shift+S";
 const DEFAULT_TIMER_WIDGET_SHORTCUT: &str = "Ctrl+Shift+T";
 const DEFAULT_TASKS_SHORTCUT: &str = "Ctrl+Shift+P";
+const DEFAULT_QUICK_TASK_SHORTCUT: &str = "Ctrl+Shift+N";
 const DEFAULT_IDLE_TIMEOUT_MINUTES: u64 = 15;
 const DEFAULT_CLIPBOARD_PAGE_SIZE: u32 = 50;
 const VERIFY_MESSAGE: &str = "pascopyof-verify-ok";
@@ -46,6 +47,7 @@ pub struct AppState {
     pub screenshot_shortcut: String,
     pub timer_widget_shortcut: String,
     pub tasks_shortcut: String,
+    pub quick_task_shortcut: String,
     pub screenshot_notification_enabled: bool,
     pub screenshot_save_dir: String,
     pub default_screenshot_save_dir: String,
@@ -942,6 +944,15 @@ fn open_tasks_window_internal(app: &AppHandle) -> Result<(), String> {
             let _ = window.minimize();
         } else {
             let _ = window.unminimize();
+            if let Ok(size) = window.inner_size() {
+                let scale = window.scale_factor().unwrap_or(1.0);
+                let log_w = size.width as f64 / scale;
+                let log_h = size.height as f64 / scale;
+                if log_w < 1100.0 || log_h < 700.0 {
+                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1300.0, height: 830.0 }));
+                    let _ = window.center();
+                }
+            }
             let _ = window.show();
             let _ = window.set_focus();
             let _ = app.emit("open-task-in-manager", serde_json::json!({ "tab": "tasks" }));
@@ -953,8 +964,8 @@ fn open_tasks_window_internal(app: &AppHandle) -> Result<(), String> {
             WebviewUrl::App("index.html#/manager".into()),
         )
         .title("PasCopyOf - Vault Manager")
-        .inner_size(1000.0, 640.0)
-        .min_inner_size(860.0, 520.0)
+        .inner_size(1300.0, 830.0)
+        .min_inner_size(1050.0, 650.0)
         .center()
         .build()
         .map_err(|e| e.to_string())?;
@@ -980,6 +991,78 @@ fn register_tasks_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), Stri
         .on_shortcut(shortcut, move |_app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 let _ = open_tasks_window_internal(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn show_quick_task_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("quick-task") {
+        let _ = w.unminimize();
+        let _ = w.center();
+        let _ = w.show();
+        let _ = w.set_focus();
+        let _ = w.emit("quick-task-reset", ());
+    } else {
+        WebviewWindowBuilder::new(
+            app,
+            "quick-task",
+            WebviewUrl::App("index.html#/quick-task".into()),
+        )
+        .title("PasCopyOf Quick Task")
+        .inner_size(520.0, 260.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .center()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+        let app_clone = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let _ = app_clone.emit("quick-task-reset", ());
+        });
+    }
+    Ok(())
+}
+
+fn hide_quick_task_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("quick-task") {
+        let _ = w.hide();
+    }
+    Ok(())
+}
+
+fn toggle_quick_task_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("quick-task") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            let _ = show_quick_task_window(app);
+        }
+    } else {
+        let _ = show_quick_task_window(app);
+    }
+    Ok(())
+}
+
+fn register_quick_task_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut: Shortcut = shortcut_str
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = toggle_quick_task_window(&app_handle);
             }
         })
         .map_err(|e| e.to_string())?;
@@ -1220,6 +1303,16 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
             "open_manager" => {
                 if let Some(window) = app.get_webview_window("manager") {
+                    let _ = window.unminimize();
+                    if let Ok(size) = window.inner_size() {
+                        let scale = window.scale_factor().unwrap_or(1.0);
+                        let log_w = size.width as f64 / scale;
+                        let log_h = size.height as f64 / scale;
+                        if log_w < 1100.0 || log_h < 700.0 {
+                            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1300.0, height: 830.0 }));
+                            let _ = window.center();
+                        }
+                    }
                     let _ = window.show();
                     let _ = window.set_focus();
                 } else {
@@ -1229,8 +1322,8 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         WebviewUrl::App("index.html#/manager".into()),
                     )
                     .title("PasCopyOf - Vault Manager")
-                    .inner_size(1000.0, 640.0)
-                    .min_inner_size(860.0, 520.0)
+                    .inner_size(1300.0, 830.0)
+                    .min_inner_size(1050.0, 650.0)
                     .center()
                     .build();
                 }
@@ -1785,6 +1878,15 @@ async fn hide_launcher(app: AppHandle) -> Result<(), String> {
 async fn open_manager(app: AppHandle, task_id: Option<i64>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("manager") {
         let _ = window.unminimize();
+        if let Ok(size) = window.inner_size() {
+            let scale = window.scale_factor().unwrap_or(1.0);
+            let log_w = size.width as f64 / scale;
+            let log_h = size.height as f64 / scale;
+            if log_w < 1100.0 || log_h < 700.0 {
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1300.0, height: 830.0 }));
+                let _ = window.center();
+            }
+        }
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
     } else {
@@ -1794,8 +1896,8 @@ async fn open_manager(app: AppHandle, task_id: Option<i64>) -> Result<(), String
             WebviewUrl::App("index.html#/manager".into()),
         )
         .title("PasCopyOf - Vault Manager")
-        .inner_size(1000.0, 640.0)
-        .min_inner_size(860.0, 520.0)
+        .inner_size(1300.0, 830.0)
+        .min_inner_size(1050.0, 650.0)
         .center()
         .build()
         .map_err(|e| e.to_string())?;
@@ -3625,6 +3727,65 @@ async fn set_tasks_shortcut(
 }
 
 #[tauri::command]
+async fn show_quick_task(app: AppHandle) -> Result<(), String> {
+    show_quick_task_window(&app)
+}
+
+#[tauri::command]
+async fn hide_quick_task(app: AppHandle) -> Result<(), String> {
+    hide_quick_task_window(&app)
+}
+
+#[tauri::command]
+async fn toggle_quick_task(app: AppHandle) -> Result<(), String> {
+    toggle_quick_task_window(&app)
+}
+
+#[tauri::command]
+async fn get_quick_task_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.quick_task_shortcut.clone())
+}
+
+#[tauri::command]
+async fn set_quick_task_shortcut(
+    shortcut: String,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let shortcut = shortcut.trim().to_string();
+    if shortcut.is_empty() {
+        return Err("Shortcut cannot be empty".into());
+    }
+    shortcut
+        .parse::<Shortcut>()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+
+    let old_shortcut = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.quick_task_shortcut.clone()
+    };
+    if shortcut == old_shortcut {
+        return Ok(());
+    }
+    if let Ok(old) = old_shortcut.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old);
+    }
+    if let Err(err) = register_quick_task_hotkey(&app, &shortcut) {
+        let _ = register_quick_task_hotkey(&app, &old_shortcut);
+        return Err(err);
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "quick_task_shortcut", &shortcut).map_err(|e| e.to_string())?;
+    st.quick_task_shortcut = shortcut;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_timer_status(
     state: State<'_, SafeAppState>,
 ) -> Result<TimerStatusInfo, String> {
@@ -4074,6 +4235,8 @@ pub fn run() {
                 .unwrap_or_else(|| DEFAULT_TIMER_WIDGET_SHORTCUT.to_string());
             let tasks_shortcut = get_meta(&conn, "tasks_shortcut")
                 .unwrap_or_else(|| DEFAULT_TASKS_SHORTCUT.to_string());
+            let quick_task_shortcut = get_meta(&conn, "quick_task_shortcut")
+                .unwrap_or_else(|| DEFAULT_QUICK_TASK_SHORTCUT.to_string());
             let screenshot_notification_enabled = get_meta(&conn, "screenshot_notification_enabled")
                 .map(|v| v != "0")
                 .unwrap_or(true);
@@ -4129,6 +4292,7 @@ pub fn run() {
                 screenshot_shortcut: screenshot_shortcut.clone(),
                 timer_widget_shortcut: timer_widget_shortcut.clone(),
                 tasks_shortcut: tasks_shortcut.clone(),
+                quick_task_shortcut: quick_task_shortcut.clone(),
                 screenshot_notification_enabled,
                 screenshot_save_dir,
                 default_screenshot_save_dir,
@@ -4172,6 +4336,9 @@ pub fn run() {
             }
             if let Err(e) = register_tasks_hotkey(app.handle(), &tasks_shortcut) {
                 eprintln!("Failed to register tasks hotkey: {e}");
+            }
+            if let Err(e) = register_quick_task_hotkey(app.handle(), &quick_task_shortcut) {
+                eprintln!("Failed to register quick task hotkey: {e}");
             }
 
             // Start clipboard watcher background thread
@@ -4288,14 +4455,18 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Focused(focused) = event {
-                if !focused && window.label() == "clipboard-launcher" {
-                    let state = window.app_handle().state::<SafeAppState>();
-                    let close_on_blur = if let Ok(st) = state.0.lock() {
-                        st.clipboard_close_on_blur
-                    } else {
-                        true
-                    };
-                    if close_on_blur {
+                if !focused {
+                    if window.label() == "clipboard-launcher" {
+                        let state = window.app_handle().state::<SafeAppState>();
+                        let close_on_blur = if let Ok(st) = state.0.lock() {
+                            st.clipboard_close_on_blur
+                        } else {
+                            true
+                        };
+                        if close_on_blur {
+                            let _ = window.hide();
+                        }
+                    } else if window.label() == "quick-task" {
                         let _ = window.hide();
                     }
                 }
@@ -4387,6 +4558,11 @@ pub fn run() {
             open_tasks_window,
             get_tasks_shortcut,
             set_tasks_shortcut,
+            show_quick_task,
+            hide_quick_task,
+            toggle_quick_task,
+            get_quick_task_shortcut,
+            set_quick_task_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

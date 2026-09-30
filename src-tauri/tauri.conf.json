@@ -74,6 +74,22 @@
         "alwaysOnTop": true,
         "shadow": false,
         "focus": false
+      },
+      {
+        "label": "quick-task",
+        "title": "PasCopyOf Quick Task",
+        "url": "/#/quick-task",
+        "width": 520,
+        "height": 260,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "center": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "focus": true
       }
     ],
     "security": {

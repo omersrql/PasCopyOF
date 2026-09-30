@@ -91,6 +91,26 @@ export async function setTimerWidgetShortcut(shortcut: string): Promise<void> {
   await invoke("set_timer_widget_shortcut", { shortcut });
 }
 
+export async function showQuickTask(): Promise<void> {
+  await invoke("show_quick_task");
+}
+
+export async function hideQuickTask(): Promise<void> {
+  await invoke("hide_quick_task");
+}
+
+export async function toggleQuickTask(): Promise<void> {
+  await invoke("toggle_quick_task");
+}
+
+export async function getQuickTaskShortcut(): Promise<string> {
+  return await invoke<string>("get_quick_task_shortcut");
+}
+
+export async function setQuickTaskShortcut(shortcut: string): Promise<void> {
+  await invoke("set_quick_task_shortcut", { shortcut });
+}
+
 export async function getTimerStatus(): Promise<TimerStatusInfo> {
   return await invoke<TimerStatusInfo>("get_timer_status");
 }
