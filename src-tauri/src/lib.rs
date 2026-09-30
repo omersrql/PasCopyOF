@@ -1719,8 +1719,9 @@ async fn hide_launcher(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_manager(app: AppHandle) -> Result<(), String> {
+async fn open_manager(app: AppHandle, task_id: Option<i64>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("manager") {
+        let _ = window.unminimize();
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
     } else {
@@ -1736,6 +1737,11 @@ async fn open_manager(app: AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     }
+
+    if let Some(tid) = task_id {
+        let _ = app.emit("open-task-in-manager", serde_json::json!({ "taskId": tid }));
+    }
+
     Ok(())
 }
 

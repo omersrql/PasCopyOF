@@ -283,6 +283,13 @@ export default function ManagerPage() {
       }
     });
 
+    const storedTask = localStorage.getItem("pascopyof_target_task_id");
+    const storedTab = localStorage.getItem("pascopyof_target_tab");
+    if (storedTask || storedTab === "tasks") {
+      setActiveTab("tasks");
+      localStorage.removeItem("pascopyof_target_tab");
+    }
+
     const unlisten = listen("open-task-in-manager", () => {
       setActiveTab("tasks");
     });
@@ -629,7 +636,56 @@ export default function ManagerPage() {
 
   return (
     <div className="manager-root">
-      {!unlocked && (
+      <div className="manager-topbar">
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div className="manager-logo">
+            <div className="manager-logo-dot" />
+            {t("topbarAdmin")}
+          </div>
+          <div className="manager-nav-tabs">
+            <button
+              type="button"
+              className={`manager-tab-btn ${activeTab === "vault" ? "active" : ""}`}
+              onClick={() => setActiveTab("vault")}
+            >
+              🔐 {t("tabVault")}
+            </button>
+            <button
+              type="button"
+              className={`manager-tab-btn ${activeTab === "tasks" ? "active" : ""}`}
+              onClick={() => setActiveTab("tasks")}
+            >
+              🎯 {t("tabTasks")}
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "vault" && unlocked && (
+          <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+            {t("topbarCredentialsCount", { count: credentials.length })}
+          </span>
+        )}
+
+        <div className="manager-topbar-right">
+          {activeTab === "vault" && unlocked && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>{t("topbarCategories")}</button>
+              <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
+            </>
+          )}
+          <button className="btn btn-secondary" onClick={() => {
+            setShowChangePassword(true);
+            loadSettings();
+          }}>{t("topbarSettings")}</button>
+          {unlocked && (
+            <button className="btn btn-secondary" onClick={handleLock}>{t("topbarLock")}</button>
+          )}
+        </div>
+      </div>
+
+      {activeTab === "tasks" && <TaskPlanner showToast={showToast} />}
+
+      {activeTab === "vault" && !unlocked && (
         <MasterPasswordAuth
           onUnlocked={() => {
             setUnlocked(true);
@@ -639,57 +695,8 @@ export default function ManagerPage() {
         />
       )}
 
-      {unlocked && (
-        <>
-          <div className="manager-topbar">
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div className="manager-logo">
-                <div className="manager-logo-dot" />
-                {t("topbarAdmin")}
-              </div>
-              <div className="manager-nav-tabs">
-                <button
-                  type="button"
-                  className={`manager-tab-btn ${activeTab === "vault" ? "active" : ""}`}
-                  onClick={() => setActiveTab("vault")}
-                >
-                  🔐 {t("tabVault")}
-                </button>
-                <button
-                  type="button"
-                  className={`manager-tab-btn ${activeTab === "tasks" ? "active" : ""}`}
-                  onClick={() => setActiveTab("tasks")}
-                >
-                  🎯 {t("tabTasks")}
-                </button>
-              </div>
-            </div>
-
-            {activeTab === "vault" && (
-              <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                {t("topbarCredentialsCount", { count: credentials.length })}
-              </span>
-            )}
-
-            <div className="manager-topbar-right">
-              {activeTab === "vault" && (
-                <>
-                  <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>{t("topbarCategories")}</button>
-                  <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
-                </>
-              )}
-              <button className="btn btn-secondary" onClick={() => {
-                setShowChangePassword(true);
-                loadSettings();
-              }}>{t("topbarSettings")}</button>
-              <button className="btn btn-secondary" onClick={handleLock}>{t("topbarLock")}</button>
-            </div>
-          </div>
-
-          {activeTab === "tasks" && <TaskPlanner showToast={showToast} />}
-
-          {activeTab === "vault" && (
-            <div className="manager-content">
+      {activeTab === "vault" && unlocked && (
+        <div className="manager-content">
               <div className="credential-list-panel">
                 <div className="list-header">
                   <div className="list-search">
@@ -1960,8 +1967,6 @@ export default function ManagerPage() {
               </div>
             </div>
           )}
-        </>
-      )}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

@@ -97,9 +97,15 @@ export default function FloatingTimerWidgetPage() {
     if ((e.target as HTMLElement).closest("button")) return;
     const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
     try {
-      await invoke("open_manager");
+      if (tid) {
+        localStorage.setItem("pascopyof_target_task_id", String(tid));
+        localStorage.setItem("pascopyof_target_tab", "tasks");
+      }
+      await invoke("open_manager", { taskId: tid ?? null });
       if (tid) {
         await emit("open-task-in-manager", { taskId: tid });
+        setTimeout(() => emit("open-task-in-manager", { taskId: tid }), 150);
+        setTimeout(() => emit("open-task-in-manager", { taskId: tid }), 450);
       }
     } catch (err) {
       console.error("Open manager error:", err);
@@ -149,9 +155,15 @@ export default function FloatingTimerWidgetPage() {
     e.stopPropagation();
     const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
     try {
-      await invoke("open_manager");
+      if (tid) {
+        localStorage.setItem("pascopyof_target_task_id", String(tid));
+        localStorage.setItem("pascopyof_target_tab", "tasks");
+      }
+      await invoke("open_manager", { taskId: tid ?? null });
       if (tid) {
         await emit("open-task-in-manager", { taskId: tid });
+        setTimeout(() => emit("open-task-in-manager", { taskId: tid }), 150);
+        setTimeout(() => emit("open-task-in-manager", { taskId: tid }), 450);
       }
     } catch (err) {
       console.error(err);

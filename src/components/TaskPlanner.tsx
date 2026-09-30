@@ -114,8 +114,55 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
     }
   }, [filter, searchQuery]);
 
+  const selectAndOpenTask = useCallback(async (targetId: number) => {
+    setFilter("all");
+    setSearchQuery("");
+    try {
+      const [tList, timer, summary] = await Promise.all([
+        getTasks("all"),
+        getActiveTimer(),
+        getDailySummary(),
+      ]);
+      setTasks(tList);
+      setActiveTimer(timer);
+      if (timer) {
+        setTimerTick(timer.elapsedSeconds);
+      }
+      setDailySummary(summary);
+      setSelectedTaskId(targetId);
+
+      const found = tList.find((t) => t.id === targetId);
+      if (found) {
+        setNotesDraft(found.notes || "");
+      }
+      getTaskChecklists(targetId).then(setChecklists).catch(console.error);
+      getTaskWorklogs(targetId).then(setWorklogs).catch(console.error);
+
+      // Smooth scroll task into view and briefly pulse it
+      setTimeout(() => {
+        const el = document.querySelector(`.task-card[data-task-id="${targetId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          el.classList.add("just-opened");
+          setTimeout(() => el.classList.remove("just-opened"), 1200);
+        }
+      }, 150);
+    } catch (err) {
+      console.error("selectAndOpenTask error:", err);
+    }
+  }, []);
+
   useEffect(() => {
-    loadData();
+    const stored = localStorage.getItem("pascopyof_target_task_id");
+    if (stored) {
+      const tid = Number(stored);
+      if (tid) {
+        selectAndOpenTask(tid);
+      }
+      localStorage.removeItem("pascopyof_target_task_id");
+    } else {
+      loadData();
+    }
 
     const unlistens: Array<() => void> = [];
     listen("timer-auto-paused", (event: any) => {
@@ -142,16 +189,17 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
     listen("timer-started", () => loadData()).then((u) => unlistens.push(u));
     listen("timer-stopped", () => loadData()).then((u) => unlistens.push(u));
     listen("open-task-in-manager", (event: any) => {
-      loadData();
       if (event.payload?.taskId) {
-        setSelectedTaskId(event.payload.taskId);
+        selectAndOpenTask(Number(event.payload.taskId));
+      } else {
+        loadData();
       }
     }).then((u) => unlistens.push(u));
 
     return () => {
       unlistens.forEach((u) => u());
     };
-  }, [loadData, lang, showToast]);
+  }, [loadData, lang, showToast, selectAndOpenTask]);
 
   // If a task is selected, load its checklist and worklogs
   useEffect(() => {
@@ -525,6 +573,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                 return (
                   <div
                     key={task.id}
+                    data-task-id={task.id}
                     className={`task-card ${isSelected ? "selected" : ""} ${
                       isDone ? "is-done" : ""
                     } ${isRunning ? "is-running" : ""}`}
