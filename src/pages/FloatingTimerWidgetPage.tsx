@@ -123,13 +123,24 @@ export default function FloatingTimerWidgetPage() {
     }
   };
 
-  // Mark current task done
+  // ESC key to hide widget
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        hideTimerWidget();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Mark current task done and close widget
   const handleMarkDone = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
     if (tid) {
       await toggleTaskStatus(tid);
-      syncStatus();
+      await hideTimerWidget();
     }
   };
 

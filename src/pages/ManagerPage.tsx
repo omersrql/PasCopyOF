@@ -49,6 +49,7 @@ import {
   pickScreenshotFolder,
   openScreenshotFolder,
 } from "../api/screenshot";
+import { getTimerWidgetShortcut, setTimerWidgetShortcut } from "../api/tasks";
 import { useApp } from "../context/AppContext";
 import type { AppTheme, AppLanguage } from "../api/config";
 import { checkAppUpdate, downloadAndInstallUpdate, getAppVersion } from "../api/updater";
@@ -137,6 +138,10 @@ export default function ManagerPage() {
   const [screenshotSaveDir, setScreenshotSaveDir] = useState("");
   const [screenshotDefaultSaveDir, setScreenshotDefaultSaveDir] = useState("");
   const [recordingScreenshotShortcut, setRecordingScreenshotShortcut] = useState(false);
+
+  // Timer Widget Shortcut State
+  const [timerWidgetShortcut, setTimerWidgetShortcutState] = useState("Ctrl+Shift+T");
+  const [recordingTimerWidgetShortcut, setRecordingTimerWidgetShortcut] = useState(false);
 
   // Software Updates State
   const [appVersion, setAppVersion] = useState("0.2.0");
@@ -259,6 +264,7 @@ export default function ManagerPage() {
         setScreenshotSaveDir(scSettings.saveDir || "");
         setScreenshotDefaultSaveDir(scSettings.defaultSaveDir || "");
       }
+      getTimerWidgetShortcut().then(setTimerWidgetShortcutState).catch(() => {});
       if (arguments[4] || true) {
         getAppVersion().then(setAppVersion);
       }
@@ -381,6 +387,37 @@ export default function ManagerPage() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingScreenshotShortcut, showToast]);
 
+  useEffect(() => {
+    if (!recordingTimerWidgetShortcut) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setRecordingTimerWidgetShortcut(false);
+        return;
+      }
+
+      const next = shortcutFromEvent(e);
+      if (!next) return;
+
+      setRecordingTimerWidgetShortcut(false);
+      void (async () => {
+        try {
+          await setTimerWidgetShortcut(next);
+          setTimerWidgetShortcutState(next);
+          showToast(`✓ Sayaç kısayolu ${next} olarak ayarlandı`, "success");
+        } catch (err) {
+          showToast(String(err), "error");
+        }
+      })();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recordingTimerWidgetShortcut, showToast]);
+
   const saveClipboardPrefs = useCallback(
     async (overrides: {
       pageSize?: number;
@@ -421,7 +458,7 @@ export default function ManagerPage() {
   );
 
   useEffect(() => {
-    if (!showChangePassword || recordingShortcut || recordingClipboardShortcut || recordingScreenshotShortcut) return;
+    if (!showChangePassword || recordingShortcut || recordingClipboardShortcut || recordingScreenshotShortcut || recordingTimerWidgetShortcut) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -430,7 +467,7 @@ export default function ManagerPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showChangePassword, recordingShortcut, recordingClipboardShortcut, recordingScreenshotShortcut]);
+  }, [showChangePassword, recordingShortcut, recordingClipboardShortcut, recordingScreenshotShortcut, recordingTimerWidgetShortcut]);
 
   const loadCategories = async () => {
     try {
@@ -827,6 +864,7 @@ export default function ManagerPage() {
                   setRecordingShortcut(false);
                   setRecordingClipboardShortcut(false);
                   setRecordingScreenshotShortcut(false);
+                  setRecordingTimerWidgetShortcut(false);
                 }
               }}
             >
@@ -855,6 +893,7 @@ export default function ManagerPage() {
                       setRecordingShortcut(false);
                       setRecordingClipboardShortcut(false);
                       setRecordingScreenshotShortcut(false);
+                      setRecordingTimerWidgetShortcut(false);
                     }}
                     title="Kapat (Esc)"
                   >
@@ -911,6 +950,25 @@ export default function ManagerPage() {
                       onClick={() => setRecordingShortcut(true)}
                     >
                       {recordingShortcut ? "..." : t("edit")}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="settings-divider" />
+
+                <div className="settings-section">
+                  <div className="settings-section-title">{t("settingsTimerWidgetShortcutTitle")}</div>
+                  <p className="settings-hint">{t("settingsTimerWidgetShortcutHint")}</p>
+                  <div className="shortcut-row">
+                    <div className={`shortcut-display ${recordingTimerWidgetShortcut ? "recording" : ""}`}>
+                      {recordingTimerWidgetShortcut ? (lang === "tr" ? "Yeni kısayola basın…" : "Press keys…") : timerWidgetShortcut}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setRecordingTimerWidgetShortcut(true)}
+                    >
+                      {recordingTimerWidgetShortcut ? (lang === "tr" ? "Dinleniyor…" : "Listening…") : t("edit")}
                     </button>
                   </div>
                 </div>

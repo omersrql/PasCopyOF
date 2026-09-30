@@ -271,6 +271,9 @@ export const translations = {
     tasksDeleteConfirm: "Bu görevi ve tüm süre kayıtlarını silmek istediğinize emin misiniz?",
     tasksRoutineCheckbox: "Tekrarlayan Rutin Görev",
     tasksWorklogHistory: "Çalışma Logları",
+    settingsTimerWidgetShortcutTitle: "Yüzen Sayaç Kısayolu",
+    settingsTimerWidgetShortcutHint: "Yüzen mini odak sayacını tek bir tuş kombinasyonuyla ekranda gösterin veya gizleyin (aç/kapa).",
+    settingsTimerWidgetShortcut: "Sayaç Göster / Gizle Kısayolu",
   },
 
   en: {
@@ -541,6 +544,9 @@ export const translations = {
     tasksDeleteConfirm: "Are you sure you want to delete this task and all its worklogs?",
     tasksRoutineCheckbox: "Recurring Routine Task",
     tasksWorklogHistory: "Worklog History",
+    settingsTimerWidgetShortcutTitle: "Floating Timer Widget Shortcut",
+    settingsTimerWidgetShortcutHint: "Quickly toggle the floating mini focus timer widget (show / hide) with a single key combination.",
+    settingsTimerWidgetShortcut: "Timer Toggle Shortcut",
   },
 } as const;
 

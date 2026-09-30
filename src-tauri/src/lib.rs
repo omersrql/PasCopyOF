@@ -28,6 +28,7 @@ use rand::RngCore;
 const DEFAULT_LAUNCHER_SHORTCUT: &str = "Ctrl+Shift+Space";
 const DEFAULT_CLIPBOARD_SHORTCUT: &str = "Ctrl+Shift+V";
 const DEFAULT_SCREENSHOT_SHORTCUT: &str = "Ctrl+Shift+S";
+const DEFAULT_TIMER_WIDGET_SHORTCUT: &str = "Ctrl+Shift+T";
 const DEFAULT_IDLE_TIMEOUT_MINUTES: u64 = 15;
 const DEFAULT_CLIPBOARD_PAGE_SIZE: u32 = 50;
 const VERIFY_MESSAGE: &str = "pascopyof-verify-ok";
@@ -42,6 +43,7 @@ pub struct AppState {
     pub launcher_shortcut: String,
     pub clipboard_shortcut: String,
     pub screenshot_shortcut: String,
+    pub timer_widget_shortcut: String,
     pub screenshot_notification_enabled: bool,
     pub screenshot_save_dir: String,
     pub default_screenshot_save_dir: String,
@@ -882,6 +884,44 @@ fn register_screenshot_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(),
         .on_shortcut(shortcut, move |_app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 let _ = trigger_screenshot_capture(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn toggle_timer_widget_internal(app: &AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("timer-widget") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            if let Ok(Some(mon)) = w.current_monitor() {
+                let size = mon.size();
+                let scale = mon.scale_factor();
+                let screen_w = size.width as f64 / scale;
+                let x = (screen_w - 290.0).max(20.0);
+                let y = 30.0;
+                let _ = w.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+            }
+            let _ = w.show();
+        }
+    }
+    Ok(())
+}
+
+fn register_timer_widget_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut: Shortcut = shortcut_str
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = toggle_timer_widget_internal(&app_handle);
             }
         })
         .map_err(|e| e.to_string())?;
@@ -3388,6 +3428,55 @@ async fn hide_timer_widget(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn toggle_timer_widget(app: AppHandle) -> Result<(), String> {
+    toggle_timer_widget_internal(&app)
+}
+
+#[tauri::command]
+async fn get_timer_widget_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.timer_widget_shortcut.clone())
+}
+
+#[tauri::command]
+async fn set_timer_widget_shortcut(
+    shortcut: String,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let shortcut = shortcut.trim().to_string();
+    if shortcut.is_empty() {
+        return Err("Shortcut cannot be empty".into());
+    }
+    shortcut
+        .parse::<Shortcut>()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+
+    let old_shortcut = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.timer_widget_shortcut.clone()
+    };
+    if shortcut == old_shortcut {
+        return Ok(());
+    }
+    if let Ok(old) = old_shortcut.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old);
+    }
+    if let Err(err) = register_timer_widget_hotkey(&app, &shortcut) {
+        let _ = register_timer_widget_hotkey(&app, &old_shortcut);
+        return Err(err);
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "timer_widget_shortcut", &shortcut).map_err(|e| e.to_string())?;
+    st.timer_widget_shortcut = shortcut;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_timer_status(
     state: State<'_, SafeAppState>,
 ) -> Result<TimerStatusInfo, String> {
@@ -3813,6 +3902,8 @@ pub fn run() {
                 .unwrap_or_else(|| DEFAULT_CLIPBOARD_SHORTCUT.to_string());
             let screenshot_shortcut = get_meta(&conn, "screenshot_shortcut")
                 .unwrap_or_else(|| DEFAULT_SCREENSHOT_SHORTCUT.to_string());
+            let timer_widget_shortcut = get_meta(&conn, "timer_widget_shortcut")
+                .unwrap_or_else(|| DEFAULT_TIMER_WIDGET_SHORTCUT.to_string());
             let screenshot_notification_enabled = get_meta(&conn, "screenshot_notification_enabled")
                 .map(|v| v != "0")
                 .unwrap_or(true);
@@ -3866,6 +3957,7 @@ pub fn run() {
                 launcher_shortcut: launcher_shortcut.clone(),
                 clipboard_shortcut: clipboard_shortcut.clone(),
                 screenshot_shortcut: screenshot_shortcut.clone(),
+                timer_widget_shortcut: timer_widget_shortcut.clone(),
                 screenshot_notification_enabled,
                 screenshot_save_dir,
                 default_screenshot_save_dir,
@@ -3903,6 +3995,9 @@ pub fn run() {
             }
             if let Err(e) = register_screenshot_hotkey(app.handle(), &screenshot_shortcut) {
                 eprintln!("Failed to register screenshot hotkey: {e}");
+            }
+            if let Err(e) = register_timer_widget_hotkey(app.handle(), &timer_widget_shortcut) {
+                eprintln!("Failed to register timer widget hotkey: {e}");
             }
 
             // Start clipboard watcher background thread
@@ -4111,6 +4206,9 @@ pub fn run() {
             get_daily_summary,
             show_timer_widget,
             hide_timer_widget,
+            toggle_timer_widget,
+            get_timer_widget_shortcut,
+            set_timer_widget_shortcut,
             get_timer_status,
         ])
         .run(tauri::generate_context!())

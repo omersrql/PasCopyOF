@@ -19,7 +19,7 @@ import {
   toggleTaskChecklist,
   deleteTaskChecklist,
   getDailySummary,
-  showTimerWidget,
+  toggleTimerWidget,
 } from "../api/tasks";
 import type {
   TaskItem,
@@ -410,8 +410,8 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => showTimerWidget()}
-            title={lang === "tr" ? "Masaüstünde yüzen küçük sayacı aç" : "Open floating desktop timer"}
+            onClick={() => toggleTimerWidget()}
+            title={lang === "tr" ? "Yüzen Sayacı Aç / Kapat (Kısayol: Ctrl+Shift+T)" : "Toggle Floating Widget (Shortcut: Ctrl+Shift+T)"}
           >
             📌 {lang === "tr" ? "Yüzen Sayaç" : "Mini Widget"}
           </button>
