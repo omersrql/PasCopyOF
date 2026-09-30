@@ -117,6 +117,7 @@ export default function ManagerPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "shortcuts" | "clipboard" | "screenshot" | "security" | "updates">("general");
   const [changePwForm, setChangePwForm] = useState({ current: "", next: "", confirm: "" });
   const [categories, setCategories] = useState<Category[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -966,9 +967,13 @@ export default function ManagerPage() {
                 }
               }}
             >
-              <div className="modal-card settings-modal">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <div className="modal-title" style={{ margin: 0 }}>{t("settingsTitle")}</div>
+              <div className="modal-card settings-modal-tabbed">
+                {/* Modal Header */}
+                <div className="settings-modal-header">
+                  <div>
+                    <div className="settings-modal-title">⚙️ {t("settingsTitle")}</div>
+                    <div className="settings-modal-subtitle">{t("settingsSubtitle")}</div>
+                  </div>
                   <button
                     type="button"
                     className="btn-icon"
@@ -1001,693 +1006,168 @@ export default function ManagerPage() {
                   </button>
                 </div>
 
-                {/* Görünüm & Dil Section */}
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsAppearanceSection")}</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div>
-                      <label className="settings-label" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
-                        {t("settingsThemeLabel")}
-                      </label>
-                      <select
-                        className="form-input"
-                        value={theme}
-                        onChange={(e) => setTheme(e.target.value as AppTheme)}
-                      >
-                        <option value="dark">{t("settingsThemeDark")}</option>
-                        <option value="light">{t("settingsThemeLight")}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="settings-label" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
-                        {t("settingsLanguageLabel")}
-                      </label>
-                      <select
-                        className="form-input"
-                        value={lang}
-                        onChange={(e) => setLanguage(e.target.value as AppLanguage)}
-                      >
-                        <option value="tr">{t("settingsLanguageTr")}</option>
-                        <option value="en">{t("settingsLanguageEn")}</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsLauncherShortcutTitle")}</div>
-                  <p className="settings-hint">{t("settingsLauncherShortcutHint")}</p>
-                  <div className="shortcut-row">
-                    <div className={`shortcut-display ${recordingShortcut ? "recording" : ""}`}>
-                      {recordingShortcut ? "..." : launcherShortcut}
-                    </div>
+                {/* Modal Body with Sidebar Tabs */}
+                <div className="settings-modal-body">
+                  {/* Left Sidebar Navigation */}
+                  <div className="settings-sidebar">
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      disabled={savingShortcut}
-                      onClick={() => setRecordingShortcut(true)}
+                      className={`settings-nav-btn ${settingsTab === "general" ? "active" : ""}`}
+                      onClick={() => setSettingsTab("general")}
                     >
-                      {recordingShortcut ? "..." : t("edit")}
+                      <span className="nav-icon">🎨</span>
+                      <span className="nav-text">{t("settingsTabGeneral")}</span>
                     </button>
-                  </div>
-                </div>
 
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsTimerWidgetShortcutTitle")}</div>
-                  <p className="settings-hint">{t("settingsTimerWidgetShortcutHint")}</p>
-                  <div className="shortcut-row">
-                    <div className={`shortcut-display ${recordingTimerWidgetShortcut ? "recording" : ""}`}>
-                      {recordingTimerWidgetShortcut ? (lang === "tr" ? "Yeni kısayola basın…" : "Press keys…") : timerWidgetShortcut}
-                    </div>
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setRecordingTimerWidgetShortcut(true)}
+                      className={`settings-nav-btn ${settingsTab === "shortcuts" ? "active" : ""}`}
+                      onClick={() => setSettingsTab("shortcuts")}
                     >
-                      {recordingTimerWidgetShortcut ? (lang === "tr" ? "Dinleniyor…" : "Listening…") : t("edit")}
+                      <span className="nav-icon">⌨️</span>
+                      <span className="nav-text">{t("settingsTabShortcuts")}</span>
+                      <span className="nav-pill-badge">6</span>
                     </button>
-                  </div>
-                </div>
 
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsTasksShortcutTitle")}</div>
-                  <p className="settings-hint">{t("settingsTasksShortcutHint")}</p>
-                  <div className="shortcut-row">
-                    <div className={`shortcut-display ${recordingTasksShortcut ? "recording" : ""}`}>
-                      {recordingTasksShortcut ? (lang === "tr" ? "Yeni kısayola basın…" : "Press keys…") : tasksShortcut}
-                    </div>
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setRecordingTasksShortcut(true)}
+                      className={`settings-nav-btn ${settingsTab === "clipboard" ? "active" : ""}`}
+                      onClick={() => setSettingsTab("clipboard")}
                     >
-                      {recordingTasksShortcut ? (lang === "tr" ? "Dinleniyor…" : "Listening…") : t("edit")}
+                      <span className="nav-icon">📋</span>
+                      <span className="nav-text">{t("settingsTabClipboard")}</span>
                     </button>
-                  </div>
-                </div>
 
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsQuickTaskShortcutTitle")}</div>
-                  <p className="settings-hint">{t("settingsQuickTaskShortcutHint")}</p>
-                  <div className="shortcut-row">
-                    <div className={`shortcut-display ${recordingQuickTaskShortcut ? "recording" : ""}`}>
-                      {recordingQuickTaskShortcut ? (lang === "tr" ? "Yeni kısayola basın…" : "Press keys…") : quickTaskShortcut}
-                    </div>
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setRecordingQuickTaskShortcut(true)}
+                      className={`settings-nav-btn ${settingsTab === "screenshot" ? "active" : ""}`}
+                      onClick={() => setSettingsTab("screenshot")}
                     >
-                      {recordingQuickTaskShortcut ? (lang === "tr" ? "Dinleniyor…" : "Listening…") : t("edit")}
+                      <span className="nav-icon">📸</span>
+                      <span className="nav-text">{t("settingsTabScreenshot")}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`settings-nav-btn ${settingsTab === "security" ? "active" : ""}`}
+                      onClick={() => setSettingsTab("security")}
+                    >
+                      <span className="nav-icon">🔒</span>
+                      <span className="nav-text">{t("settingsTabSecurity")}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`settings-nav-btn ${settingsTab === "updates" ? "active" : ""}`}
+                      onClick={() => setSettingsTab("updates")}
+                    >
+                      <span className="nav-icon">🚀</span>
+                      <span className="nav-text">{t("settingsTabUpdates")}</span>
+                      {updateInfo?.available && <span className="nav-pill-badge new">New</span>}
                     </button>
                   </div>
-                </div>
 
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsClipboardSectionTitle")}</div>
-                  <p className="settings-hint">{t("settingsClipboardSectionHint")}</p>
-
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Pano Geçmişi Kısayolu</div>
-                    <div className="shortcut-row">
-                      <div className={`shortcut-display ${recordingClipboardShortcut ? "recording" : ""}`}>
-                        {recordingClipboardShortcut ? "Yeni kısayola basın…" : clipboardShortcut}
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setRecordingClipboardShortcut(true)}
-                      >
-                        {recordingClipboardShortcut ? "Dinleniyor…" : "Değiştir"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
-                      {t("settingsClipPageSizeTitle")}
-                    </div>
-                    <select
-                      className="form-input"
-                      value={clipboardPageSize}
-                      onChange={async (e) => {
-                        const nextSize = Number(e.target.value);
-                        setClipboardPageSize(nextSize);
-                        try {
-                          await saveClipboardPrefs({ pageSize: nextSize });
-                          showToast(`Kayıt limiti ${nextSize} olarak güncellendi`, "success");
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        }
-                      }}
-                    >
-                      <option value={15}>15 Kayıt (Hafif Görünüm)</option>
-                      <option value={25}>25 Kayıt</option>
-                      <option value={50}>50 Kayıt</option>
-                      <option value={100}>100 Kayıt (Önerilen)</option>
-                      <option value={200}>200 Kayıt</option>
-                      <option value={500}>500 Kayıt</option>
-                      <option value={1000}>1.000 Kayıt</option>
-                      <option value={2500}>2.500 Kayıt</option>
-                      <option value={5000}>5.000 Kayıt (Geniş Arşiv)</option>
-                      <option value={10000}>10.000 Kayıt (Maksimum)</option>
-                    </select>
-                    <p className="settings-hint" style={{ marginTop: 4 }}>
-                      {t("settingsClipPageSizeHint")}
-                    </p>
-                  </div>
-
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
-                      {t("settingsClipWindowMode")}
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setClipboardWindowMode("popup");
-                          try {
-                            await saveClipboardPrefs({ windowMode: "popup" });
-                            showToast("Pano formatı: Açılır Pencere (Popup)", "success");
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "10px 14px",
-                          borderRadius: 8,
-                          border: clipboardWindowMode === "popup"
-                            ? "2px solid #0ea5e9"
-                            : "1px solid rgba(255, 255, 255, 0.12)",
-                          background: clipboardWindowMode === "popup"
-                            ? "rgba(14, 165, 233, 0.15)"
-                            : "rgba(255, 255, 255, 0.03)",
-                          color: "#fff",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          transition: "all 0.18s ease",
-                        }}
-                      >
-                        <span style={{ fontSize: 20 }}>🗗</span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>
-                            {t("settingsClipWindowModePopup")}
+                  {/* Right Content Area */}
+                  <div className="settings-content-pane">
+                    {/* ─── TAB 1: Görünüm & Sistem ─── */}
+                    {settingsTab === "general" && (
+                      <>
+                        <div className="settings-pane-header">
+                          <div className="settings-pane-title">
+                            <span>🎨</span>
+                            <span>{t("settingsTabGeneral")}</span>
                           </div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-                            900 × 500 px (Kompakt)
+                          <div className="settings-pane-desc">
+                            Uygulama teması, sistem dili ve açılış tercihlerini yapılandırın.
                           </div>
                         </div>
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setClipboardWindowMode("fullscreen");
-                          try {
-                            await saveClipboardPrefs({ windowMode: "fullscreen" });
-                            showToast("Pano formatı: Tam Ekran (Fullscreen)", "success");
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "10px 14px",
-                          borderRadius: 8,
-                          border: clipboardWindowMode === "fullscreen"
-                            ? "2px solid #0ea5e9"
-                            : "1px solid rgba(255, 255, 255, 0.12)",
-                          background: clipboardWindowMode === "fullscreen"
-                            ? "rgba(14, 165, 233, 0.15)"
-                            : "rgba(255, 255, 255, 0.03)",
-                          color: "#fff",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          transition: "all 0.18s ease",
-                        }}
-                      >
-                        <span style={{ fontSize: 20 }}>⛶</span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>
-                            {t("settingsClipWindowModeFullscreen")}
+                        {/* Theme & Language */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🎭</span>
+                            <span>{t("settingsAppearanceSection")}</span>
                           </div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-                            Tüm Ekran (Geniş Odak)
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                            <div>
+                              <label className="settings-label" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
+                                {t("settingsThemeLabel")}
+                              </label>
+                              <select
+                                className="form-input"
+                                value={theme}
+                                onChange={(e) => setTheme(e.target.value as AppTheme)}
+                              >
+                                <option value="dark">{t("settingsThemeDark")}</option>
+                                <option value="light">{t("settingsThemeLight")}</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="settings-label" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
+                                {t("settingsLanguageLabel")}
+                              </label>
+                              <select
+                                className="form-input"
+                                value={lang}
+                                onChange={(e) => setLanguage(e.target.value as AppLanguage)}
+                              >
+                                <option value="tr">{t("settingsLanguageTr")}</option>
+                                <option value="en">{t("settingsLanguageEn")}</option>
+                              </select>
+                            </div>
                           </div>
                         </div>
-                      </button>
-                    </div>
-                    <p className="settings-hint" style={{ marginTop: 6 }}>
-                      {t("settingsClipWindowModeHint")}
-                    </p>
-                  </div>
 
-                  {/* Panel & Önizleme Boyutu (Küçük / Orta / Büyük) */}
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
-                      {t("settingsPanelScaleTitle")}
-                    </div>
-                    <p className="settings-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-                      {t("settingsPanelScaleHint")}
-                    </p>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-                      {[
-                        { id: "small" as const, label: t("settingsPanelScaleSmall"), desc: "85%" },
-                        { id: "medium" as const, label: t("settingsPanelScaleMedium"), desc: "100%" },
-                        { id: "large" as const, label: t("settingsPanelScaleLarge"), desc: "118%" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={async () => {
-                            setPanelScale(opt.id);
-                            try {
-                              await saveClipboardPrefs({ panelScale: opt.id });
-                              showToast(
-                                lang === "tr"
-                                  ? `Pano ölçeği ${opt.desc} olarak ayarlandı`
-                                  : `Panel scale set to ${opt.desc}`,
-                                "success"
-                              );
-                            } catch (err) {
-                              showToast(String(err), "error");
-                            }
-                          }}
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            padding: "8px 6px",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                            border: panelScale === opt.id ? "2px solid #0ea5e9" : "1px solid rgba(255, 255, 255, 0.12)",
-                            background: panelScale === opt.id ? "rgba(14, 165, 233, 0.15)" : "rgba(255, 255, 255, 0.03)",
-                            color: "#fff",
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          <span style={{ fontWeight: 600, fontSize: 12.5 }}>{opt.label.split(" ")[0]}</span>
-                          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>{opt.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Live Mini Preview Box */}
-                    <div
-                      style={{
-                        padding: panelScale === "small" ? "6px 10px" : panelScale === "large" ? "12px 14px" : "9px 12px",
-                        background: "rgba(255, 255, 255, 0.03)",
-                        border: "1px dashed rgba(255, 255, 255, 0.2)",
-                        borderRadius: panelScale === "small" ? 6 : panelScale === "large" ? 12 : 8,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: panelScale === "small" ? 8 : panelScale === "large" ? 14 : 10,
-                        transition: "all 0.2s ease-in-out",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: panelScale === "small" ? 22 : panelScale === "large" ? 34 : 28,
-                          height: panelScale === "small" ? 22 : panelScale === "large" ? 34 : 28,
-                          borderRadius: 6,
-                          background: "rgba(14, 165, 233, 0.25)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: panelScale === "small" ? 11 : panelScale === "large" ? 16 : 13,
-                        }}
-                      >
-                        📋
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: panelScale === "small" ? 11.5 : panelScale === "large" ? 14.5 : 13,
-                            fontWeight: 500,
-                            color: "var(--color-text-primary)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {t("settingsPanelScalePreview")} — https://example.com/api/v1/auth
+                        {/* Windows Autostart */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🖥️</span>
+                            <span>Sistem Başlangıcı (Windows Autostart)</span>
+                          </div>
+                          <label className="settings-toggle">
+                            <input
+                              type="checkbox"
+                              checked={autostartOn}
+                              onChange={async (e) => {
+                                const next = e.target.checked;
+                                try {
+                                  if (next) await enableAutostart();
+                                  else await disableAutostart();
+                                  setAutostartOn(next);
+                                  showToast(next ? "Autostart enabled" : "Autostart disabled", "success");
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                            />
+                            <span>Bilgisayar açıldığında PasCopyOf'u arka planda başlat</span>
+                          </label>
+                          <p className="settings-hint" style={{ marginTop: -2 }}>
+                            PasCopyOf sistem tepsisinde (tray) hafif bir servis olarak çalışmaya devam eder.
+                          </p>
                         </div>
-                        <div
-                          style={{
-                            fontSize: panelScale === "small" ? 10 : panelScale === "large" ? 12 : 11,
-                            color: "var(--color-text-secondary)",
-                            marginTop: 2,
-                          }}
-                        >
-                          {panelScale === "small"
-                            ? (lang === "tr" ? "Kompakt Önizleme Boyutu (Küçük)" : "Compact Preview Scale (Small)")
-                            : panelScale === "large"
-                            ? (lang === "tr" ? "Geniş & Rahat Okuma Boyutu (Büyük)" : "Spacious Preview Scale (Large)")
-                            : (lang === "tr" ? "Dengeli Standart Önizleme Boyutu (Orta)" : "Standard Balanced Preview (Medium)")}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
-                      İçerik Detay Önizleme Gecikmesi (Mercek / Hover)
-                    </div>
-                    <select
-                      className="form-input"
-                      value={clipboardPreviewDelayMs}
-                      onChange={async (e) => {
-                        const nextDelay = Number(e.target.value);
-                        setClipboardPreviewDelayMs(nextDelay);
-                        try {
-                          await saveClipboardPrefs({ previewDelayMs: nextDelay });
-                          showToast(
-                            nextDelay === 0
-                              ? "Önizleme gecikmesiz (anında) açılacak"
-                              : `Önizleme gecikmesi ${nextDelay / 1000} saniye olarak güncellendi`,
-                            "success"
-                          );
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        }
-                      }}
-                    >
-                      <option value={0}>Hemen Aç (0 saniye - Anında)</option>
-                      <option value={500}>0.5 saniye</option>
-                      <option value={1000}>1 saniye</option>
-                      <option value={1500}>1.5 saniye</option>
-                      <option value={2000}>2 saniye (Varsayılan)</option>
-                      <option value={3000}>3 saniye</option>
-                      <option value={4000}>4 saniye</option>
-                      <option value={5000}>5 saniye</option>
-                    </select>
-                    <p className="settings-hint" style={{ marginTop: 4 }}>
-                      İlk kayıtta belirlenen süre kadar duraklayınca açılır; ardından diğer kayıtlara geçildiğinde anında güncellenir.
-                    </p>
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={clipboardLockWithVault}
-                        onChange={async (e) => {
-                          const nextLock = e.target.checked;
-                          setClipboardLockWithVault(nextLock);
-                          try {
-                            await saveClipboardPrefs({ lockWithVault: nextLock });
-                            showToast(
-                              nextLock
-                                ? "Kasa kilitliyken pano geçmişi de kilitlenecek"
-                                : "Pano geçmişi kasa kilidinden bağımsız çalışacak",
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      Kasa kilitliyken pano geçmişini de kilitle
-                    </label>
-
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={clipboardEnabled}
-                        onChange={async (e) => {
-                          const nextEnabled = e.target.checked;
-                          setClipboardEnabled(nextEnabled);
-                          try {
-                            await saveClipboardPrefs({ enabled: nextEnabled });
-                            showToast(
-                              nextEnabled ? "Pano geçmişi kaydı aktif" : "Pano geçmişi kaydı duraklatıldı",
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      Pano geçmişi izleyicisini aktif et
-                    </label>
-
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={autoPasteOnSelect}
-                        onChange={async (e) => {
-                          const nextAuto = e.target.checked;
-                          setAutoPasteOnSelect(nextAuto);
-                          try {
-                            await saveClipboardPrefs({ autoPasteOnSelect: nextAuto });
-                            showToast(
-                              nextAuto
-                                ? (lang === "tr" ? "Otomatik yapıştırma aktif" : "Auto-paste enabled")
-                                : (lang === "tr" ? "Otomatik yapıştırma kapatıldı" : "Auto-paste disabled"),
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      {t("settingsAutoPasteTitle")}
-                    </label>
-                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
-                      {t("settingsAutoPasteHint")}
-                    </p>
-
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={clipboardCloseOnBlur}
-                        onChange={async (e) => {
-                          const nextBlur = e.target.checked;
-                          setClipboardCloseOnBlur(nextBlur);
-                          try {
-                            await saveClipboardPrefs({ closeOnBlur: nextBlur });
-                            showToast(
-                              nextBlur
-                                ? "Pano dışına tıklandığında kapatma aktif"
-                                : "Pano dışına tıklandığında kapatma devre dışı",
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      {t("settingsClipCloseOnBlur")}
-                    </label>
-                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
-                      {t("settingsClipCloseOnBlurHint")}
-                    </p>
-
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={clipboardCloseOnSpace}
-                        onChange={async (e) => {
-                          const nextSpace = e.target.checked;
-                          setClipboardCloseOnSpace(nextSpace);
-                          try {
-                            await saveClipboardPrefs({ closeOnSpace: nextSpace });
-                            showToast(
-                              nextSpace
-                                ? "Space tuşu ile kapatma aktif"
-                                : "Space tuşu ile kapatma devre dışı",
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      {t("settingsClipCloseOnSpace")}
-                    </label>
-                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
-                      {t("settingsClipCloseOnSpaceHint")}
-                    </p>
-
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={clipboardClearSearchOnOpen}
-                        onChange={async (e) => {
-                          const nextClear = e.target.checked;
-                          setClipboardClearSearchOnOpen(nextClear);
-                          try {
-                            await saveClipboardPrefs({ clearSearchOnOpen: nextClear });
-                            showToast(
-                              nextClear
-                                ? "Açılışta arama sıfırlama aktif"
-                                : "Açılışta arama sıfırlama devre dışı",
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      {t("settingsClearSearchOnOpen")}
-                    </label>
-                    <p className="settings-hint" style={{ marginTop: -2, marginBottom: 4 }}>
-                      {t("settingsClearSearchOnOpenHint")}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
-                    onClick={async () => {
-                      if (window.confirm("Sabitlenmemiş tüm pano geçmişi silinecektir. Emin misiniz?")) {
-                        try {
-                          await clearClipboardHistory();
-                          showToast("Pano geçmişi temizlendi", "success");
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        }
-                      }
-                    }}
-                  >
-                    Tüm Pano Geçmişini Temizle
-                  </button>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsScreenshotSectionTitle")}</div>
-                  <p className="settings-hint">
-                    {t("settingsScreenshotSectionHint")}
-                  </p>
-
-                  <div className="settings-field">
-                    <label className="settings-label">{t("settingsScreenshotShortcut")}</label>
-                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <button
-                        type="button"
-                        className={`btn ${recordingScreenshotShortcut ? "btn-primary" : "btn-secondary"}`}
-                        onClick={() => setRecordingScreenshotShortcut(true)}
-                      >
-                        {recordingScreenshotShortcut ? "..." : screenshotShortcut}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={async () => {
-                          try {
-                            await triggerScreenshot();
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      >
-                        {lang === "tr" ? "Şimdi Yakala" : "Capture Now"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="settings-field" style={{ marginTop: 14 }}>
-                    <label className="settings-label">{t("settingsScreenshotSaveDirTitle")}</label>
-                    <p className="settings-hint" style={{ marginBottom: 8 }}>
-                      {t("settingsScreenshotSaveDirHint")}
-                    </p>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
-                        background: "rgba(255, 255, 255, 0.04)",
-                        border: "1px solid var(--border-color)",
-                        fontSize: "12px",
-                        fontFamily: "monospace",
-                        color: "var(--text-primary)",
-                        wordBreak: "break-all",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      <span style={{ flex: 1 }}>
-                        {screenshotSaveDir || screenshotDefaultSaveDir || "Pictures\\PasCopyOf"}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={async () => {
-                          try {
-                            const selected = await pickScreenshotFolder();
-                            if (selected) {
-                              const updated = await updateScreenshotSettings(
-                                screenshotNotificationEnabled,
-                                selected
-                              );
-                              setScreenshotSaveDir(updated.saveDir);
-                              setScreenshotDefaultSaveDir(updated.defaultSaveDir);
-                              showToast(
-                                lang === "tr"
-                                  ? `Kayıt dizini güncellendi: ${updated.saveDir}`
-                                  : `Save directory updated: ${updated.saveDir}`,
-                                "success"
-                              );
-                            }
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      >
-                        📁 {t("settingsScreenshotBrowseBtn")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={async () => {
-                          try {
-                            await openScreenshotFolder();
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      >
-                        📂 {t("settingsScreenshotOpenFolderBtn")}
-                      </button>
-                      {screenshotSaveDir &&
-                        screenshotDefaultSaveDir &&
-                        screenshotSaveDir !== screenshotDefaultSaveDir && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={async () => {
+                        {/* Auto-Lock Timeout */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>⏱️</span>
+                            <span>{t("settingsAutoLockTitle")}</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            {t("settingsAutoLockHint")}
+                          </p>
+                          <select
+                            className="form-input"
+                            value={idleTimeout}
+                            onChange={async (e) => {
+                              const minutes = Number(e.target.value);
                               try {
-                                const updated = await updateScreenshotSettings(
-                                  screenshotNotificationEnabled,
-                                  ""
-                                );
-                                setScreenshotSaveDir(updated.saveDir);
-                                setScreenshotDefaultSaveDir(updated.defaultSaveDir);
+                                await setIdleTimeout(minutes);
+                                setIdleTimeoutState(minutes);
                                 showToast(
-                                  lang === "tr"
-                                    ? `Varsayılan kayıt dizinine dönüldü: ${updated.saveDir}`
-                                    : `Reset to default directory: ${updated.saveDir}`,
+                                  minutes === 0
+                                    ? (lang === "tr" ? "Otomatik kilitleme devre dışı" : "Auto-lock disabled")
+                                    : (lang === "tr" ? `Otomatik kilitleme: ${minutes} dakika` : `Auto-lock set to ${minutes} min`),
                                   "success"
                                 );
                               } catch (err) {
@@ -1695,339 +1175,1026 @@ export default function ManagerPage() {
                               }
                             }}
                           >
-                            ↺ {t("settingsScreenshotResetDirBtn")}
-                          </button>
-                        )}
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 12 }}>
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={screenshotNotificationEnabled}
-                        onChange={async (e) => {
-                          const next = e.target.checked;
-                          setScreenshotNotificationEnabled(next);
-                          try {
-                            await updateScreenshotSettings(next);
-                            showToast(
-                              next
-                                ? (lang === "tr" ? "Ekran görüntüsü bildirimi aktif" : "Screenshot notification enabled")
-                                : (lang === "tr" ? "Ekran görüntüsü bildirimi kapatıldı" : "Screenshot notification disabled"),
-                              "success"
-                            );
-                          } catch (err) {
-                            showToast(String(err), "error");
-                          }
-                        }}
-                      />
-                      {t("settingsScreenshotNotify")}
-                    </label>
-                    <p className="settings-hint" style={{ marginTop: 4 }}>
-                      {t("settingsScreenshotNotifyHint")}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsAutoLockTitle")}</div>
-                  <p className="settings-hint">{t("settingsAutoLockHint")}</p>
-                  <select
-                    className="form-input"
-                    value={idleTimeout}
-                    onChange={async (e) => {
-                      const minutes = Number(e.target.value);
-                      try {
-                        await setIdleTimeout(minutes);
-                        setIdleTimeoutState(minutes);
-                        showToast(
-                          minutes === 0
-                            ? (lang === "tr" ? "Otomatik kilitleme devre dışı" : "Auto-lock disabled")
-                            : (lang === "tr" ? `Otomatik kilitleme: ${minutes} dakika` : `Auto-lock set to ${minutes} min`),
-                          "success"
-                        );
-                      } catch (err) {
-                        showToast(String(err), "error");
-                      }
-                    }}
-                  >
-                    <option value={0}>{lang === "tr" ? "Devre Dışı (Kapatılmaz)" : "Never"}</option>
-                    <option value={1}>1 {lang === "tr" ? "dakika" : "minute"}</option>
-                    <option value={5}>5 {lang === "tr" ? "dakika" : "minutes"}</option>
-                    <option value={15}>15 {lang === "tr" ? "dakika" : "minutes"}</option>
-                    <option value={30}>30 {lang === "tr" ? "dakika" : "minutes"}</option>
-                    <option value={60}>60 {lang === "tr" ? "dakika" : "minutes"}</option>
-                  </select>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsClipboardClearTitle")}</div>
-                  <p className="settings-hint">{t("settingsClipboardClearHint")}</p>
-                  <select
-                    className="form-input"
-                    value={clipboardClearSeconds}
-                    onChange={async (e) => {
-                      const secs = Number(e.target.value);
-                      try {
-                        await setClipboardClearSeconds(secs);
-                        setClipboardClearSecondsState(secs);
-                        showToast(
-                          secs === 0
-                            ? (lang === "tr" ? "Parola panodan otomatik silinmeyecek" : "Password won't be cleared automatically")
-                            : (lang === "tr" ? `Parola panoda ${secs} saniye tutulacak` : `Password clipboard cleared after ${secs}s`),
-                          "success"
-                        );
-                      } catch (err) {
-                        showToast(String(err), "error");
-                      }
-                    }}
-                  >
-                    <option value={5}>5 {lang === "tr" ? "saniye" : "seconds"}</option>
-                    <option value={10}>10 {lang === "tr" ? "saniye" : "seconds"}</option>
-                    <option value={15}>15 {lang === "tr" ? "saniye (Varsayılan)" : "seconds (Default)"}</option>
-                    <option value={30}>30 {lang === "tr" ? "saniye" : "seconds"}</option>
-                    <option value={60}>60 {lang === "tr" ? "saniye (1 dakika)" : "seconds (1 minute)"}</option>
-                    <option value={120}>120 {lang === "tr" ? "saniye (2 dakika)" : "seconds (2 minutes)"}</option>
-                    <option value={0}>{lang === "tr" ? "Asla Temizleme (Devre Dışı)" : "Never Clear (Disabled)"}</option>
-                  </select>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">Start with Windows</div>
-                  <label className="settings-toggle">
-                    <input
-                      type="checkbox"
-                      checked={autostartOn}
-                      onChange={async (e) => {
-                        const next = e.target.checked;
-                        try {
-                          if (next) await enableAutostart();
-                          else await disableAutostart();
-                          setAutostartOn(next);
-                          showToast(next ? "Autostart enabled" : "Autostart disabled", "success");
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        }
-                      }}
-                    />
-                    Launch PasCopyOf when I sign in
-                  </label>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">Backup &amp; Import</div>
-                  <p className="settings-hint">
-                    Backup keeps passwords encrypted. Restore replaces the current vault (same master password required).
-                    CSV import supports KeePass/browser exports (`name,username,password,...`).
-                  </p>
-                  <div className="settings-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={busyIo}
-                      onClick={async () => {
-                        const path = await save({
-                          defaultPath: `PasCopyOf-backup-${new Date().toISOString().slice(0, 10)}.pascopyof`,
-                          filters: [{ name: "PasCopyOf Backup", extensions: ["pascopyof"] }],
-                        });
-                        if (!path) return;
-                        setBusyIo(true);
-                        try {
-                          await exportVault(path);
-                          showToast("✓ Backup exported", "success");
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        } finally {
-                          setBusyIo(false);
-                        }
-                      }}
-                    >
-                      Export Backup
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={busyIo}
-                      onClick={async () => {
-                        const ok = window.confirm(
-                          "Restore will replace ALL current vault data. Continue?"
-                        );
-                        if (!ok) return;
-                        const path = await open({
-                          multiple: false,
-                          filters: [{ name: "PasCopyOf Backup", extensions: ["pascopyof", "json"] }],
-                        });
-                        if (!path || Array.isArray(path)) return;
-                        setBusyIo(true);
-                        try {
-                          await restoreVault(path);
-                          showToast("Vault restored — unlock with the backup master password", "success");
-                          setShowChangePassword(false);
-                          handleAutoLock();
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        } finally {
-                          setBusyIo(false);
-                        }
-                      }}
-                    >
-                      Restore Backup
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={busyIo}
-                      onClick={async () => {
-                        const path = await open({
-                          multiple: false,
-                          filters: [{ name: "CSV", extensions: ["csv"] }],
-                        });
-                        if (!path || Array.isArray(path)) return;
-                        setBusyIo(true);
-                        try {
-                          const result = await importCsv(path);
-                          showToast(
-                            `Imported ${result.imported} · skipped ${result.skipped}`,
-                            "success"
-                          );
-                          await loadCredentials(searchQuery);
-                          await loadCategories();
-                        } catch (err) {
-                          showToast(String(err), "error");
-                        } finally {
-                          setBusyIo(false);
-                        }
-                      }}
-                    >
-                      Import CSV
-                    </button>
-                  </div>
-                </div>
-
-                <div className="settings-divider" />
-
-                {/* Software Updates Section */}
-                <div className="settings-section">
-                  <div className="settings-section-title">{t("settingsUpdaterSectionTitle")}</div>
-                  <p className="settings-hint">{t("settingsUpdaterSectionHint")}</p>
-
-                  <div className="updater-box">
-                    <div className="updater-header-row">
-                      <div>
-                        <span style={{ fontSize: 13, color: "var(--color-text-secondary)", marginRight: 8 }}>
-                          {t("settingsUpdaterCurrentVersion")}:
-                        </span>
-                        <span className="updater-version-tag">
-                          v{appVersion}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={updateChecking || downloadProgress !== null}
-                        onClick={handleCheckUpdate}
-                      >
-                        {updateChecking ? t("settingsUpdaterChecking") : t("settingsUpdaterCheckBtn")}
-                      </button>
-                    </div>
-
-                    {updateInfo && !updateInfo.available && (
-                      <div className="updater-status-uptodate">
-                        {t("settingsUpdaterUpToDate")}
-                      </div>
-                    )}
-
-                    {updateInfo && updateInfo.available && (
-                      <div className="updater-available-card">
-                        <div className="updater-badge-new">
-                          🚀 {t("settingsUpdaterNewVersion").replace("{version}", updateInfo.version || "")}
+                            <option value={0}>{lang === "tr" ? "Devre Dışı (Kapatılmaz)" : "Never"}</option>
+                            <option value={1}>1 {lang === "tr" ? "dakika" : "minute"}</option>
+                            <option value={5}>5 {lang === "tr" ? "dakika" : "minutes"}</option>
+                            <option value={15}>15 {lang === "tr" ? "dakika" : "minutes"}</option>
+                            <option value={30}>30 {lang === "tr" ? "dakika" : "minutes"}</option>
+                            <option value={60}>60 {lang === "tr" ? "dakika" : "minutes"}</option>
+                          </select>
                         </div>
-                        {updateInfo.body && (
-                          <div className="updater-notes">
-                            {updateInfo.body}
-                          </div>
-                        )}
-                        {downloadProgress !== null ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div className="updater-progress-track">
-                              <div
-                                className="updater-progress-fill"
-                                style={{ width: `${downloadProgress}%` }}
-                              />
-                            </div>
-                            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", textAlign: "right" }}>
-                              {t("settingsUpdaterDownloading").replace("{percent}", String(downloadProgress))}
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={handleInstallUpdate}
-                          >
-                            {t("settingsUpdaterInstallBtn")}
-                          </button>
-                        )}
-                      </div>
+                      </>
                     )}
 
-                    {updateError && (
-                      <div style={{ fontSize: 12, color: "var(--color-danger)", marginTop: 4 }}>
-                        ⚠️ {updateError}
-                      </div>
+                    {/* ─── TAB 2: Kısayol Tuşları (Unified Global Hub) ─── */}
+                    {settingsTab === "shortcuts" && (
+                      <>
+                        <div className="settings-pane-header">
+                          <div className="settings-pane-title">
+                            <span>⌨️</span>
+                            <span>{t("settingsShortcutsHeader")}</span>
+                          </div>
+                          <div className="settings-pane-desc">
+                            {t("settingsShortcutsDesc")}
+                          </div>
+                        </div>
+
+                        <div className="shortcut-hub-list">
+                          {/* 1. Launcher */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">🔑</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsLauncherShortcutTitle")}</div>
+                                <div className="shortcut-hub-desc">{t("settingsLauncherShortcutHint")}</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingShortcut ? "recording" : ""}`}>
+                                {recordingShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : launcherShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                disabled={savingShortcut}
+                                onClick={() => setRecordingShortcut(true)}
+                              >
+                                {recordingShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 2. Clipboard History */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">📋</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsClipboardShortcut")}</div>
+                                <div className="shortcut-hub-desc">Kopyalanan tüm geçmişi ve çoklu filtrelemeyi ekrana getirir.</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingClipboardShortcut ? "recording" : ""}`}>
+                                {recordingClipboardShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : clipboardShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingClipboardShortcut(true)}
+                              >
+                                {recordingClipboardShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 3. Screenshot */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">📸</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsScreenshotShortcut")}</div>
+                                <div className="shortcut-hub-desc">Bölge seçimi, çizim araçları ve Windows OCR metin ayıklamayı başlatır.</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingScreenshotShortcut ? "recording" : ""}`}>
+                                {recordingScreenshotShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : screenshotShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingScreenshotShortcut(true)}
+                              >
+                                {recordingScreenshotShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 4. Floating Timer Widget */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">⏱️</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsTimerWidgetShortcutTitle")}</div>
+                                <div className="shortcut-hub-desc">{t("settingsTimerWidgetShortcutHint")}</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingTimerWidgetShortcut ? "recording" : ""}`}>
+                                {recordingTimerWidgetShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : timerWidgetShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingTimerWidgetShortcut(true)}
+                              >
+                                {recordingTimerWidgetShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 5. Tasks Window */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">📊</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsTasksShortcutTitle")}</div>
+                                <div className="shortcut-hub-desc">{t("settingsTasksShortcutHint")}</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingTasksShortcut ? "recording" : ""}`}>
+                                {recordingTasksShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : tasksShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingTasksShortcut(true)}
+                              >
+                                {recordingTasksShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 6. Quick Task Creator */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">⚡</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsQuickTaskShortcutTitle")}</div>
+                                <div className="shortcut-hub-desc">{t("settingsQuickTaskShortcutHint")}</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingQuickTaskShortcut ? "recording" : ""}`}>
+                                {recordingQuickTaskShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : quickTaskShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingQuickTaskShortcut(true)}
+                              >
+                                {recordingQuickTaskShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* ─── TAB 3: Pano Geçmişi ─── */}
+                    {settingsTab === "clipboard" && (
+                      <>
+                        <div className="settings-pane-header">
+                          <div className="settings-pane-title">
+                            <span>📋</span>
+                            <span>{t("settingsTabClipboard")}</span>
+                          </div>
+                          <div className="settings-pane-desc">
+                            {t("settingsClipboardSectionHint")}
+                          </div>
+                        </div>
+
+                        {/* Format & Size Limits */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>📊</span>
+                            <span>{t("settingsClipboardRecordLimit")}</span>
+                          </div>
+                          <select
+                            className="form-input"
+                            value={clipboardPageSize}
+                            onChange={async (e) => {
+                              const nextSize = Number(e.target.value);
+                              setClipboardPageSize(nextSize);
+                              try {
+                                await saveClipboardPrefs({ pageSize: nextSize });
+                                showToast(`Kayıt limiti ${nextSize} olarak güncellendi`, "success");
+                              } catch (err) {
+                                showToast(String(err), "error");
+                              }
+                            }}
+                          >
+                            <option value={15}>15 Kayıt (Hafif Görünüm)</option>
+                            <option value={25}>25 Kayıt</option>
+                            <option value={50}>50 Kayıt</option>
+                            <option value={100}>100 Kayıt (Önerilen)</option>
+                            <option value={200}>200 Kayıt</option>
+                            <option value={500}>500 Kayıt</option>
+                            <option value={1000}>1.000 Kayıt</option>
+                            <option value={2500}>2.500 Kayıt</option>
+                            <option value={5000}>5.000 Kayıt (Geniş Arşiv)</option>
+                            <option value={10000}>10.000 Kayıt (Maksimum)</option>
+                          </select>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            {t("settingsClipPageSizeHint")}
+                          </p>
+                        </div>
+
+                        {/* Window Format & Modes */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🗖</span>
+                            <span>{t("settingsClipWindowMode")}</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setClipboardWindowMode("popup");
+                                try {
+                                  await saveClipboardPrefs({ windowMode: "popup" });
+                                  showToast("Pano formatı: Açılır Pencere (Popup)", "success");
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "10px 14px",
+                                borderRadius: 8,
+                                border: clipboardWindowMode === "popup"
+                                  ? "2px solid #0ea5e9"
+                                  : "1px solid rgba(255, 255, 255, 0.12)",
+                                background: clipboardWindowMode === "popup"
+                                  ? "rgba(14, 165, 233, 0.15)"
+                                  : "rgba(255, 255, 255, 0.03)",
+                                color: "#fff",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                transition: "all 0.18s ease",
+                              }}
+                            >
+                              <span style={{ fontSize: 20 }}>🗗</span>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                  {t("settingsClipWindowModePopup")}
+                                </div>
+                                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                                  900 × 500 px (Kompakt)
+                                </div>
+                              </div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setClipboardWindowMode("fullscreen");
+                                try {
+                                  await saveClipboardPrefs({ windowMode: "fullscreen" });
+                                  showToast("Pano formatı: Tam Ekran (Fullscreen)", "success");
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "10px 14px",
+                                borderRadius: 8,
+                                border: clipboardWindowMode === "fullscreen"
+                                  ? "2px solid #0ea5e9"
+                                  : "1px solid rgba(255, 255, 255, 0.12)",
+                                background: clipboardWindowMode === "fullscreen"
+                                  ? "rgba(14, 165, 233, 0.15)"
+                                  : "rgba(255, 255, 255, 0.03)",
+                                color: "#fff",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                transition: "all 0.18s ease",
+                              }}
+                            >
+                              <span style={{ fontSize: 20 }}>⛶</span>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                  {t("settingsClipWindowModeFullscreen")}
+                                </div>
+                                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                                  Tüm Ekran (Geniş Odak)
+                                </div>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Panel Scale & Live Preview */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🔍</span>
+                            <span>{t("settingsPanelScaleTitle")}</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                            {[
+                              { id: "small" as const, label: t("settingsPanelScaleSmall"), desc: "85%" },
+                              { id: "medium" as const, label: t("settingsPanelScaleMedium"), desc: "100%" },
+                              { id: "large" as const, label: t("settingsPanelScaleLarge"), desc: "118%" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={async () => {
+                                  setPanelScale(opt.id);
+                                  try {
+                                    await saveClipboardPrefs({ panelScale: opt.id });
+                                    showToast(
+                                      lang === "tr"
+                                        ? `Pano ölçeği ${opt.desc} olarak ayarlandı`
+                                        : `Panel scale set to ${opt.desc}`,
+                                      "success"
+                                    );
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  padding: "8px 6px",
+                                  borderRadius: 8,
+                                  cursor: "pointer",
+                                  border: panelScale === opt.id ? "2px solid #0ea5e9" : "1px solid rgba(255, 255, 255, 0.12)",
+                                  background: panelScale === opt.id ? "rgba(14, 165, 233, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                                  color: "#fff",
+                                  transition: "all 0.15s ease",
+                                }}
+                              >
+                                <span style={{ fontWeight: 600, fontSize: 12.5 }}>{opt.label.split(" ")[0]}</span>
+                                <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>{opt.desc}</span>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Live Preview Box */}
+                          <div
+                            style={{
+                              padding: panelScale === "small" ? "6px 10px" : panelScale === "large" ? "12px 14px" : "9px 12px",
+                              background: "rgba(255, 255, 255, 0.03)",
+                              border: "1px dashed rgba(255, 255, 255, 0.2)",
+                              borderRadius: panelScale === "small" ? 6 : panelScale === "large" ? 12 : 8,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: panelScale === "small" ? 8 : panelScale === "large" ? 14 : 10,
+                              transition: "all 0.2s ease-in-out",
+                              marginTop: 4,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: panelScale === "small" ? 22 : panelScale === "large" ? 34 : 28,
+                                height: panelScale === "small" ? 22 : panelScale === "large" ? 34 : 28,
+                                borderRadius: 6,
+                                background: "rgba(14, 165, 233, 0.25)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: panelScale === "small" ? 11 : panelScale === "large" ? 16 : 13,
+                              }}
+                            >
+                              📋
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: panelScale === "small" ? 11.5 : panelScale === "large" ? 14.5 : 13,
+                                  fontWeight: 500,
+                                  color: "var(--color-text-primary)",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {t("settingsPanelScalePreview")} — https://example.com/api/v1/auth
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: panelScale === "small" ? 10 : panelScale === "large" ? 12 : 11,
+                                  color: "var(--color-text-secondary)",
+                                  marginTop: 2,
+                                }}
+                              >
+                                {panelScale === "small"
+                                  ? (lang === "tr" ? "Kompakt Önizleme Boyutu (Küçük)" : "Compact Preview Scale (Small)")
+                                  : panelScale === "large"
+                                  ? (lang === "tr" ? "Geniş & Rahat Okuma Boyutu (Büyük)" : "Spacious Preview Scale (Large)")
+                                  : (lang === "tr" ? "Dengeli Standart Önizleme Boyutu (Orta)" : "Standard Balanced Preview (Medium)")}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Behavior Toggles */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>⚙️</span>
+                            <span>Davranış & Güvenlik Tercihleri</span>
+                          </div>
+
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            <label className="settings-toggle">
+                              <input
+                                type="checkbox"
+                                checked={clipboardEnabled}
+                                onChange={async (e) => {
+                                  const nextEnabled = e.target.checked;
+                                  setClipboardEnabled(nextEnabled);
+                                  try {
+                                    await saveClipboardPrefs({ enabled: nextEnabled });
+                                    showToast(
+                                      nextEnabled ? "Pano geçmişi kaydı aktif" : "Pano geçmişi kaydı duraklatıldı",
+                                      "success"
+                                    );
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>Pano geçmişi izleyicisini aktif et</span>
+                            </label>
+
+                            <label className="settings-toggle">
+                              <input
+                                type="checkbox"
+                                checked={clipboardLockWithVault}
+                                onChange={async (e) => {
+                                  const nextLock = e.target.checked;
+                                  setClipboardLockWithVault(nextLock);
+                                  try {
+                                    await saveClipboardPrefs({ lockWithVault: nextLock });
+                                    showToast(
+                                      nextLock
+                                        ? "Kasa kilitliyken pano geçmişi de kilitlenecek"
+                                        : "Pano geçmişi kasa kilidinden bağımsız çalışacak",
+                                      "success"
+                                    );
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>Kasa kilitliyken pano geçmişini de kilitle</span>
+                            </label>
+
+                            <label className="settings-toggle">
+                              <input
+                                type="checkbox"
+                                checked={autoPasteOnSelect}
+                                onChange={async (e) => {
+                                  const nextAuto = e.target.checked;
+                                  setAutoPasteOnSelect(nextAuto);
+                                  try {
+                                    await saveClipboardPrefs({ autoPasteOnSelect: nextAuto });
+                                    showToast(
+                                      nextAuto
+                                        ? (lang === "tr" ? "Otomatik yapıştırma aktif" : "Auto-paste enabled")
+                                        : (lang === "tr" ? "Otomatik yapıştırma kapatıldı" : "Auto-paste disabled"),
+                                      "success"
+                                    );
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>{t("settingsAutoPasteTitle")}</span>
+                            </label>
+
+                            <label className="settings-toggle">
+                              <input
+                                type="checkbox"
+                                checked={clipboardCloseOnBlur}
+                                onChange={async (e) => {
+                                  const nextBlur = e.target.checked;
+                                  setClipboardCloseOnBlur(nextBlur);
+                                  try {
+                                    await saveClipboardPrefs({ closeOnBlur: nextBlur });
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>{t("settingsClipCloseOnBlur")}</span>
+                            </label>
+
+                            <label className="settings-toggle">
+                              <input
+                                type="checkbox"
+                                checked={clipboardCloseOnSpace}
+                                onChange={async (e) => {
+                                  const nextSpace = e.target.checked;
+                                  setClipboardCloseOnSpace(nextSpace);
+                                  try {
+                                    await saveClipboardPrefs({ closeOnSpace: nextSpace });
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>{t("settingsClipCloseOnSpace")}</span>
+                            </label>
+
+                            <label className="settings-toggle">
+                              <input
+                                type="checkbox"
+                                checked={clipboardClearSearchOnOpen}
+                                onChange={async (e) => {
+                                  const nextClear = e.target.checked;
+                                  setClipboardClearSearchOnOpen(nextClear);
+                                  try {
+                                    await saveClipboardPrefs({ clearSearchOnOpen: nextClear });
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>{t("settingsClearSearchOnOpen")}</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Danger zone: Clear */}
+                        <div className="settings-card" style={{ borderColor: "rgba(239, 68, 68, 0.3)" }}>
+                          <div className="settings-card-title" style={{ color: "#ef4444" }}>
+                            <span>🗑️</span>
+                            <span>Pano Geçmişini Sıfırla</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            Sabitlenmemiş (yıldızsız) tüm pano geçmişi yerel veritabanından kalıcı olarak silinir.
+                          </p>
+                          <div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                              onClick={async () => {
+                                if (window.confirm("Sabitlenmemiş tüm pano geçmişi silinecektir. Emin misiniz?")) {
+                                  try {
+                                    await clearClipboardHistory();
+                                    showToast("Pano geçmişi temizlendi", "success");
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }
+                              }}
+                            >
+                              Tüm Pano Geçmişini Temizle
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* ─── TAB 4: Ekran Alıntısı ─── */}
+                    {settingsTab === "screenshot" && (
+                      <>
+                        <div className="settings-pane-header">
+                          <div className="settings-pane-title">
+                            <span>📸</span>
+                            <span>{t("settingsTabScreenshot")}</span>
+                          </div>
+                          <div className="settings-pane-desc">
+                            {t("settingsScreenshotSectionHint")}
+                          </div>
+                        </div>
+
+                        {/* Test & Trigger */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>⚡</span>
+                            <span>Hızlı Yakalama & Test</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            Ekran alıntısı modunu hemen test edebilir veya kısayol tuşunu kullanabilirsiniz.
+                          </p>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={async () => {
+                                try {
+                                  await triggerScreenshot();
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                            >
+                              📸 {lang === "tr" ? "Şimdi Yakala" : "Capture Now"}
+                            </button>
+                            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                              veya <strong>{screenshotShortcut}</strong> tuşlayın
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Save Directory */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>📁</span>
+                            <span>{t("settingsScreenshotSaveDirTitle")}</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            {t("settingsScreenshotSaveDirHint")}
+                          </p>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              background: "rgba(255, 255, 255, 0.04)",
+                              border: "1px solid var(--border-color)",
+                              fontSize: "12px",
+                              fontFamily: "monospace",
+                              color: "var(--text-primary)",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            <span>{screenshotSaveDir || screenshotDefaultSaveDir || "Pictures\\PasCopyOf"}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={async () => {
+                                try {
+                                  const selected = await pickScreenshotFolder();
+                                  if (selected) {
+                                    const updated = await updateScreenshotSettings(
+                                      screenshotNotificationEnabled,
+                                      selected
+                                    );
+                                    setScreenshotSaveDir(updated.saveDir);
+                                    setScreenshotDefaultSaveDir(updated.defaultSaveDir);
+                                    showToast(
+                                      lang === "tr"
+                                        ? `Kayıt dizini güncellendi: ${updated.saveDir}`
+                                        : `Save directory updated: ${updated.saveDir}`,
+                                      "success"
+                                    );
+                                  }
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                            >
+                              📁 {t("settingsScreenshotBrowseBtn")}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={async () => {
+                                try {
+                                  await openScreenshotFolder();
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                            >
+                              📂 {t("settingsScreenshotOpenFolderBtn")}
+                            </button>
+                            {screenshotSaveDir &&
+                              screenshotDefaultSaveDir &&
+                              screenshotSaveDir !== screenshotDefaultSaveDir && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={async () => {
+                                    try {
+                                      const updated = await updateScreenshotSettings(
+                                        screenshotNotificationEnabled,
+                                        ""
+                                      );
+                                      setScreenshotSaveDir(updated.saveDir);
+                                      setScreenshotDefaultSaveDir(updated.defaultSaveDir);
+                                      showToast(
+                                        lang === "tr"
+                                          ? `Varsayılan kayıt dizinine dönüldü: ${updated.saveDir}`
+                                          : `Reset to default directory: ${updated.saveDir}`,
+                                        "success"
+                                      );
+                                    } catch (err) {
+                                      showToast(String(err), "error");
+                                    }
+                                  }}
+                                >
+                                  ↺ {t("settingsScreenshotResetDirBtn")}
+                                </button>
+                              )}
+                          </div>
+                        </div>
+
+                        {/* Notifications */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🔔</span>
+                            <span>Bildirim Tercihleri</span>
+                          </div>
+                          <label className="settings-toggle">
+                            <input
+                              type="checkbox"
+                              checked={screenshotNotificationEnabled}
+                              onChange={async (e) => {
+                                const next = e.target.checked;
+                                setScreenshotNotificationEnabled(next);
+                                try {
+                                  await updateScreenshotSettings(next);
+                                  showToast(
+                                    next
+                                      ? (lang === "tr" ? "Ekran görüntüsü bildirimi aktif" : "Screenshot notification enabled")
+                                      : (lang === "tr" ? "Ekran görüntüsü bildirimi kapatıldı" : "Screenshot notification disabled"),
+                                    "success"
+                                  );
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                            />
+                            <span>{t("settingsScreenshotNotify")}</span>
+                          </label>
+                          <p className="settings-hint" style={{ marginTop: -2 }}>
+                            {t("settingsScreenshotNotifyHint")}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {/* ─── TAB 5: Güvenlik & Kasa ─── */}
+                    {settingsTab === "security" && (
+                      <>
+                        <div className="settings-pane-header">
+                          <div className="settings-pane-title">
+                            <span>🔒</span>
+                            <span>{t("settingsTabSecurity")}</span>
+                          </div>
+                          <div className="settings-pane-desc">
+                            Ana parola yönetimi, pano temizliği ve şifreli kasa yedekleme işlemleri.
+                          </div>
+                        </div>
+
+                        {/* Change Master Password */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🔑</span>
+                            <span>Ana Parola Değiştir (Change Master Password)</span>
+                          </div>
+                          <form onSubmit={handleChangeMasterPassword} className="editor-form" style={{ gap: 10 }}>
+                            <input
+                              type="password"
+                              placeholder="Mevcut Ana Parola"
+                              className="form-input"
+                              value={changePwForm.current}
+                              onChange={(e) => setChangePwForm({ ...changePwForm, current: e.target.value })}
+                            />
+                            <input
+                              type="password"
+                              placeholder="Yeni Ana Parola"
+                              className="form-input"
+                              value={changePwForm.next}
+                              onChange={(e) => setChangePwForm({ ...changePwForm, next: e.target.value })}
+                            />
+                            <input
+                              type="password"
+                              placeholder="Yeni Ana Parolayı Onayla"
+                              className="form-input"
+                              value={changePwForm.confirm}
+                              onChange={(e) => setChangePwForm({ ...changePwForm, confirm: e.target.value })}
+                            />
+                            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                              <button type="submit" className="btn btn-primary">Parolayı Güncelle</button>
+                            </div>
+                          </form>
+                        </div>
+
+                        {/* Password Clipboard Clear Seconds */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>⏱️</span>
+                            <span>{t("settingsClipboardClearTitle")}</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            {t("settingsClipboardClearHint")}
+                          </p>
+                          <select
+                            className="form-input"
+                            value={clipboardClearSeconds}
+                            onChange={async (e) => {
+                              const secs = Number(e.target.value);
+                              try {
+                                await setClipboardClearSeconds(secs);
+                                setClipboardClearSecondsState(secs);
+                                showToast(
+                                  secs === 0
+                                    ? (lang === "tr" ? "Parola panodan otomatik silinmeyecek" : "Password won't be cleared automatically")
+                                    : (lang === "tr" ? `Parola panoda ${secs} saniye tutulacak` : `Password clipboard cleared after ${secs}s`),
+                                  "success"
+                                );
+                              } catch (err) {
+                                showToast(String(err), "error");
+                              }
+                            }}
+                          >
+                            <option value={5}>5 {lang === "tr" ? "saniye" : "seconds"}</option>
+                            <option value={10}>10 {lang === "tr" ? "saniye" : "seconds"}</option>
+                            <option value={15}>15 {lang === "tr" ? "saniye (Varsayılan)" : "seconds (Default)"}</option>
+                            <option value={30}>30 {lang === "tr" ? "saniye" : "seconds"}</option>
+                            <option value={60}>60 {lang === "tr" ? "saniye (1 dakika)" : "seconds (1 minute)"}</option>
+                            <option value={120}>120 {lang === "tr" ? "saniye (2 dakika)" : "seconds (2 minutes)"}</option>
+                            <option value={0}>{lang === "tr" ? "Asla Temizleme (Devre Dışı)" : "Never Clear (Disabled)"}</option>
+                          </select>
+                        </div>
+
+                        {/* Backup & Import */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>💾</span>
+                            <span>Kasa Yedekleme & İçe Aktarma (Backup & Import)</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            Yedekleme dosyanız (.pascopyof) tüm parolalarınızı şifreli olarak saklar. Geri yükleme mevcut kasayı değiştirir.
+                          </p>
+                          <div className="settings-actions">
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              disabled={busyIo}
+                              onClick={async () => {
+                                const path = await save({
+                                  defaultPath: `PasCopyOf-backup-${new Date().toISOString().slice(0, 10)}.pascopyof`,
+                                  filters: [{ name: "PasCopyOf Backup", extensions: ["pascopyof"] }],
+                                });
+                                if (!path) return;
+                                setBusyIo(true);
+                                try {
+                                  await exportVault(path);
+                                  showToast("✓ Backup exported", "success");
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                } finally {
+                                  setBusyIo(false);
+                                }
+                              }}
+                            >
+                              Export Backup (.pascopyof)
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              disabled={busyIo}
+                              onClick={async () => {
+                                const ok = window.confirm(
+                                  "Restore will replace ALL current vault data. Continue?"
+                                );
+                                if (!ok) return;
+                                const path = await open({
+                                  multiple: false,
+                                  filters: [{ name: "PasCopyOf Backup", extensions: ["pascopyof", "json"] }],
+                                });
+                                if (!path || Array.isArray(path)) return;
+                                setBusyIo(true);
+                                try {
+                                  await restoreVault(path);
+                                  showToast("Vault restored — unlock with the backup master password", "success");
+                                  setShowChangePassword(false);
+                                  handleAutoLock();
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                } finally {
+                                  setBusyIo(false);
+                                }
+                              }}
+                            >
+                              Restore Backup
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              disabled={busyIo}
+                              onClick={async () => {
+                                const path = await open({
+                                  multiple: false,
+                                  filters: [{ name: "CSV", extensions: ["csv"] }],
+                                });
+                                if (!path || Array.isArray(path)) return;
+                                setBusyIo(true);
+                                try {
+                                  const result = await importCsv(path);
+                                  showToast(
+                                    `Imported ${result.imported} · skipped ${result.skipped}`,
+                                    "success"
+                                  );
+                                  await loadCredentials(searchQuery);
+                                  await loadCategories();
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                } finally {
+                                  setBusyIo(false);
+                                }
+                              }}
+                            >
+                              Import CSV
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* ─── TAB 6: Güncellemeler & Bilgi ─── */}
+                    {settingsTab === "updates" && (
+                      <>
+                        <div className="settings-pane-header">
+                          <div className="settings-pane-title">
+                            <span>🚀</span>
+                            <span>{t("settingsTabUpdates")}</span>
+                          </div>
+                          <div className="settings-pane-desc">
+                            {t("settingsUpdaterSectionHint")}
+                          </div>
+                        </div>
+
+                        {/* Update box */}
+                        <div className="settings-card">
+                          <div className="updater-header-row">
+                            <div>
+                              <span style={{ fontSize: 13, color: "var(--color-text-secondary)", marginRight: 8 }}>
+                                {t("settingsUpdaterCurrentVersion")}:
+                              </span>
+                              <span className="updater-version-tag">
+                                v{appVersion}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              disabled={updateChecking || downloadProgress !== null}
+                              onClick={handleCheckUpdate}
+                            >
+                              {updateChecking ? t("settingsUpdaterChecking") : t("settingsUpdaterCheckBtn")}
+                            </button>
+                          </div>
+
+                          {updateInfo && !updateInfo.available && (
+                            <div className="updater-status-uptodate">
+                              {t("settingsUpdaterUpToDate")}
+                            </div>
+                          )}
+
+                          {updateInfo && updateInfo.available && (
+                            <div className="updater-available-card">
+                              <div className="updater-badge-new">
+                                🚀 {t("settingsUpdaterNewVersion").replace("{version}", updateInfo.version || "")}
+                              </div>
+                              {updateInfo.body && (
+                                <div className="updater-notes">
+                                  {updateInfo.body}
+                                </div>
+                              )}
+                              {downloadProgress !== null ? (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                  <div className="updater-progress-track">
+                                    <div
+                                      className="updater-progress-fill"
+                                      style={{ width: `${downloadProgress}%` }}
+                                    />
+                                  </div>
+                                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", textAlign: "right" }}>
+                                    {t("settingsUpdaterDownloading").replace("{percent}", String(downloadProgress))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  onClick={handleInstallUpdate}
+                                >
+                                  {t("settingsUpdaterInstallBtn")}
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {updateError && (
+                            <div style={{ fontSize: 12, color: "var(--color-danger)", marginTop: 4 }}>
+                              ⚠️ {updateError}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* About Architecture Box */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🛡️</span>
+                            <span>PasCopyOf Güvenlik Mimarisi</span>
+                          </div>
+                          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                            PasCopyOf, parolalarınızı, pano geçmişinizi ve zaman kayıtlarınızı üçüncü taraf sunuculara göndermeden, tamamen yerel SQLite veritabanında <strong>Argon2id</strong> anahtar türetimi ve <strong>AES-256-GCM</strong> şifreleme algoritması ile korur.
+                          </p>
+                        </div>
+                      </>
                     )}
                   </div>
-                </div>
-
-                <div className="settings-divider" />
-
-                <div className="settings-section">
-                  <div className="settings-section-title">Change Master Password</div>
-                  <form onSubmit={handleChangeMasterPassword} className="editor-form" style={{ gap: 10 }}>
-                    <input
-                      type="password"
-                      placeholder="Current Password"
-                      className="form-input"
-                      value={changePwForm.current}
-                      onChange={(e) => setChangePwForm({ ...changePwForm, current: e.target.value })}
-                    />
-                    <input
-                      type="password"
-                      placeholder="New Password"
-                      className="form-input"
-                      value={changePwForm.next}
-                      onChange={(e) => setChangePwForm({ ...changePwForm, next: e.target.value })}
-                    />
-                    <input
-                      type="password"
-                      placeholder="Confirm New Password"
-                      className="form-input"
-                      value={changePwForm.confirm}
-                      onChange={(e) => setChangePwForm({ ...changePwForm, confirm: e.target.value })}
-                    />
-                    <div className="modal-actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => {
-                          setShowChangePassword(false);
-                          setRecordingShortcut(false);
-                        }}
-                      >
-                        Close
-                      </button>
-                      <button type="submit" className="btn btn-primary">Update Password</button>
-                    </div>
-                  </form>
                 </div>
               </div>
             </div>
