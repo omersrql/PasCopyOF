@@ -1229,11 +1229,17 @@ export default function ScreenshotOverlayPage() {
       }
 
       const dataUrl = getCroppedDataUrl();
-      if (!dataUrl) return;
+      if (!dataUrl) {
+        showOverlayToast("Kaydedilecek alan bulunamadı.");
+        return;
+      }
 
       const savedPath = await saveAnnotatedImage(dataUrl);
       if (savedPath) {
-        showOverlayToast("Kaydedildi!");
+        showOverlayToast(`✓ Ekran görüntüsü kaydedildi: ${savedPath}`);
+        setTimeout(() => {
+          void hideScreenshotOverlay();
+        }, 700);
       }
     } catch (err) {
       showOverlayToast(`Kaydetme başarısız: ${err}`);
@@ -1711,7 +1717,7 @@ export default function ScreenshotOverlayPage() {
           <button
             type="button"
             className="toolbar-btn-action secondary"
-            title="Farklı Kaydet (Ctrl+S)"
+            title="Kayıt Dizinine Kaydet (Ctrl+S)"
             onClick={handleSave}
             disabled={isSaving}
           >
@@ -1720,7 +1726,7 @@ export default function ScreenshotOverlayPage() {
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            <span>Kaydet</span>
+            <span>{isSaving ? "Kaydediliyor..." : "Kaydet"}</span>
           </button>
 
           {/* Close */}

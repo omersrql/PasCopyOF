@@ -40,13 +40,30 @@ export async function extractTextFromImage(base64Png: string): Promise<string> {
 export interface ScreenshotSettings {
   shortcut: string;
   notificationEnabled: boolean;
+  saveDir: string;
+  defaultSaveDir: string;
 }
 
 export async function getScreenshotSettings(): Promise<ScreenshotSettings> {
   return invoke<ScreenshotSettings>("get_screenshot_settings");
 }
 
-export async function updateScreenshotSettings(notificationEnabled: boolean): Promise<void> {
-  return invoke<void>("update_screenshot_settings", { notificationEnabled });
+export async function updateScreenshotSettings(
+  notificationEnabled: boolean,
+  saveDir?: string
+): Promise<ScreenshotSettings> {
+  return invoke<ScreenshotSettings>("update_screenshot_settings", {
+    notificationEnabled,
+    saveDir: saveDir !== undefined ? saveDir : null,
+  });
 }
+
+export async function pickScreenshotFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_screenshot_folder");
+}
+
+export async function openScreenshotFolder(): Promise<void> {
+  return invoke<void>("open_screenshot_folder");
+}
+
 

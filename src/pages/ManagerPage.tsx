@@ -44,6 +44,8 @@ import {
   triggerScreenshot,
   getScreenshotSettings,
   updateScreenshotSettings,
+  pickScreenshotFolder,
+  openScreenshotFolder,
 } from "../api/screenshot";
 import { useApp } from "../context/AppContext";
 import type { AppTheme, AppLanguage } from "../api/config";
@@ -129,6 +131,8 @@ export default function ManagerPage() {
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
   const [screenshotNotificationEnabled, setScreenshotNotificationEnabled] = useState(true);
+  const [screenshotSaveDir, setScreenshotSaveDir] = useState("");
+  const [screenshotDefaultSaveDir, setScreenshotDefaultSaveDir] = useState("");
   const [recordingScreenshotShortcut, setRecordingScreenshotShortcut] = useState(false);
 
   // Software Updates State
@@ -221,6 +225,8 @@ export default function ManagerPage() {
         getScreenshotSettings().catch(() => ({
           shortcut: "Ctrl+Shift+S",
           notificationEnabled: true,
+          saveDir: "",
+          defaultSaveDir: "",
         })),
         getClipboardClearSeconds().catch(() => 15),
         getAppVersion().catch(() => "0.2.0"),
@@ -247,6 +253,8 @@ export default function ManagerPage() {
       if (scSettings) {
         setScreenshotShortcutState(scSettings.shortcut);
         setScreenshotNotificationEnabled(scSettings.notificationEnabled);
+        setScreenshotSaveDir(scSettings.saveDir || "");
+        setScreenshotDefaultSaveDir(scSettings.defaultSaveDir || "");
       }
       if (arguments[4] || true) {
         getAppVersion().then(setAppVersion);
@@ -1358,6 +1366,103 @@ export default function ManagerPage() {
                       >
                         {lang === "tr" ? "Şimdi Yakala" : "Capture Now"}
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="settings-field" style={{ marginTop: 14 }}>
+                    <label className="settings-label">{t("settingsScreenshotSaveDirTitle")}</label>
+                    <p className="settings-hint" style={{ marginBottom: 8 }}>
+                      {t("settingsScreenshotSaveDirHint")}
+                    </p>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        background: "rgba(255, 255, 255, 0.04)",
+                        border: "1px solid var(--border-color)",
+                        fontSize: "12px",
+                        fontFamily: "monospace",
+                        color: "var(--text-primary)",
+                        wordBreak: "break-all",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>
+                        {screenshotSaveDir || screenshotDefaultSaveDir || "Pictures\\PasCopyOf"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          try {
+                            const selected = await pickScreenshotFolder();
+                            if (selected) {
+                              const updated = await updateScreenshotSettings(
+                                screenshotNotificationEnabled,
+                                selected
+                              );
+                              setScreenshotSaveDir(updated.saveDir);
+                              setScreenshotDefaultSaveDir(updated.defaultSaveDir);
+                              showToast(
+                                lang === "tr"
+                                  ? `Kayıt dizini güncellendi: ${updated.saveDir}`
+                                  : `Save directory updated: ${updated.saveDir}`,
+                                "success"
+                              );
+                            }
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      >
+                        📁 {t("settingsScreenshotBrowseBtn")}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          try {
+                            await openScreenshotFolder();
+                          } catch (err) {
+                            showToast(String(err), "error");
+                          }
+                        }}
+                      >
+                        📂 {t("settingsScreenshotOpenFolderBtn")}
+                      </button>
+                      {screenshotSaveDir &&
+                        screenshotDefaultSaveDir &&
+                        screenshotSaveDir !== screenshotDefaultSaveDir && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={async () => {
+                              try {
+                                const updated = await updateScreenshotSettings(
+                                  screenshotNotificationEnabled,
+                                  ""
+                                );
+                                setScreenshotSaveDir(updated.saveDir);
+                                setScreenshotDefaultSaveDir(updated.defaultSaveDir);
+                                showToast(
+                                  lang === "tr"
+                                    ? `Varsayılan kayıt dizinine dönüldü: ${updated.saveDir}`
+                                    : `Reset to default directory: ${updated.saveDir}`,
+                                  "success"
+                                );
+                              } catch (err) {
+                                showToast(String(err), "error");
+                              }
+                            }}
+                          >
+                            ↺ {t("settingsScreenshotResetDirBtn")}
+                          </button>
+                        )}
                     </div>
                   </div>
 

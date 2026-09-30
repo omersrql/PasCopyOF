@@ -43,6 +43,8 @@ pub struct AppState {
     pub clipboard_shortcut: String,
     pub screenshot_shortcut: String,
     pub screenshot_notification_enabled: bool,
+    pub screenshot_save_dir: String,
+    pub default_screenshot_save_dir: String,
     pub clipboard_page_size: u32,
     pub clipboard_lock_with_vault: bool,
     pub clipboard_enabled: bool,
@@ -103,6 +105,8 @@ pub struct ClipboardSettings {
 pub struct ScreenshotSettings {
     pub shortcut: String,
     pub notification_enabled: bool,
+    pub save_dir: String,
+    pub default_save_dir: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -2547,36 +2551,68 @@ if ($result -and $result.Lines) {{
     Ok(text)
 }
 
+fn get_default_screenshot_dir(app: &AppHandle) -> PathBuf {
+    if let Ok(pic_dir) = app.path().picture_dir() {
+        pic_dir.join("PasCopyOf")
+    } else if let Ok(user_profile) = std::env::var("USERPROFILE") {
+        PathBuf::from(user_profile).join("Pictures").join("PasCopyOf")
+    } else if let Ok(data_dir) = app.path().app_data_dir() {
+        data_dir.join("Screenshots")
+    } else {
+        PathBuf::from("C:\\PasCopyOf_Screenshots")
+    }
+}
+
 #[tauri::command]
 async fn save_annotated_image(
     app: AppHandle,
+    state: State<'_, SafeAppState>,
     base64_png: String,
     default_filename: Option<String>,
 ) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     let bytes = decode_base64_png(&base64_png)?;
-    let default_name = default_filename.unwrap_or_else(|| {
-        let now = chrono::Local::now();
-        format!("PasCopyOf_Screenshot_{}.png", now.format("%Y%m%d_%H%M%S"))
-    });
+    let (save_dir_str, notify_enabled) = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        (st.screenshot_save_dir.clone(), st.screenshot_notification_enabled)
+    };
 
-    let file_path = app
-        .dialog()
-        .file()
-        .add_filter("PNG Resim (*.png)", &["png"])
-        .set_file_name(&default_name)
-        .blocking_save_file();
-
-    if let Some(path) = file_path {
-        let p = path.as_path().ok_or("Geçersiz dosya yolu")?;
-        std::fs::write(p, bytes).map_err(|e| e.to_string())?;
-        if let Some(w) = app.get_webview_window("screenshot-overlay") {
-            let _ = w.hide();
-        }
-        Ok(Some(p.to_string_lossy().to_string()))
+    let target_dir = if save_dir_str.trim().is_empty() {
+        get_default_screenshot_dir(&app)
     } else {
-        Ok(None)
+        PathBuf::from(&save_dir_str)
+    };
+
+    std::fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("Kayıt dizini oluşturulamadı ({}): {}", target_dir.display(), e))?;
+
+    let now = chrono::Local::now();
+    let base_stem = default_filename
+        .map(|f| f.trim_end_matches(".png").to_string())
+        .unwrap_or_else(|| format!("PasCopyOf_Screenshot_{}", now.format("%Y%m%d_%H%M%S")));
+
+    let mut final_path = target_dir.join(format!("{}.png", base_stem));
+    let mut counter = 1u32;
+    while final_path.exists() {
+        final_path = target_dir.join(format!("{}_{}.png", base_stem, counter));
+        counter += 1;
     }
+
+    std::fs::write(&final_path, &bytes)
+        .map_err(|e| format!("Dosya kaydedilemedi: {}", e))?;
+
+    let saved_str = final_path.to_string_lossy().to_string();
+
+    if notify_enabled {
+        use tauri_plugin_notification::NotificationExt;
+        let _ = app
+            .notification()
+            .builder()
+            .title("PasCopyOf — Ekran Görüntüsü Kaydedildi")
+            .body(format!("✓ Kaydedildi:\n{}", saved_str))
+            .show();
+    }
+
+    Ok(Some(saved_str))
 }
 
 #[tauri::command]
@@ -2639,16 +2675,29 @@ async fn get_screenshot_settings(
     Ok(ScreenshotSettings {
         shortcut: st.screenshot_shortcut.clone(),
         notification_enabled: st.screenshot_notification_enabled,
+        save_dir: st.screenshot_save_dir.clone(),
+        default_save_dir: st.default_screenshot_save_dir.clone(),
     })
 }
 
 #[tauri::command]
 async fn update_screenshot_settings(
     notification_enabled: bool,
+    save_dir: Option<String>,
     state: State<'_, SafeAppState>,
-) -> Result<(), String> {
+) -> Result<ScreenshotSettings, String> {
     let mut st = state.0.lock().map_err(|e| e.to_string())?;
     st.screenshot_notification_enabled = notification_enabled;
+    if let Some(dir) = save_dir {
+        let trimmed = dir.trim();
+        let next_dir = if trimmed.is_empty() {
+            st.default_screenshot_save_dir.clone()
+        } else {
+            trimmed.to_string()
+        };
+        let _ = std::fs::create_dir_all(&next_dir);
+        st.screenshot_save_dir = next_dir;
+    }
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
     set_meta(
         &conn,
@@ -2656,6 +2705,66 @@ async fn update_screenshot_settings(
         if notification_enabled { "1" } else { "0" },
     )
     .map_err(|e| e.to_string())?;
+    set_meta(&conn, "screenshot_save_dir", &st.screenshot_save_dir)
+        .map_err(|e| e.to_string())?;
+
+    Ok(ScreenshotSettings {
+        shortcut: st.screenshot_shortcut.clone(),
+        notification_enabled: st.screenshot_notification_enabled,
+        save_dir: st.screenshot_save_dir.clone(),
+        default_save_dir: st.default_screenshot_save_dir.clone(),
+    })
+}
+
+#[tauri::command]
+async fn pick_screenshot_folder(
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let current_dir = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.screenshot_save_dir.clone()
+    };
+
+    let mut builder = app.dialog().file().set_title("Ekran Görüntüsü Kayıt Klasörünü Seçin");
+    let cur_path = PathBuf::from(&current_dir);
+    if cur_path.exists() {
+        builder = builder.set_directory(cur_path);
+    }
+
+    let picked = builder.blocking_pick_folder();
+    if let Some(folder) = picked {
+        if let Some(p) = folder.as_path() {
+            let path_str = p.to_string_lossy().to_string();
+            let _ = std::fs::create_dir_all(p);
+            let mut st = state.0.lock().map_err(|e| e.to_string())?;
+            st.screenshot_save_dir = path_str.clone();
+            let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+            set_meta(&conn, "screenshot_save_dir", &path_str).map_err(|e| e.to_string())?;
+            return Ok(Some(path_str));
+        }
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+async fn open_screenshot_folder(
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let dir = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.screenshot_save_dir.clone()
+    };
+    let p = PathBuf::from(&dir);
+    let _ = std::fs::create_dir_all(&p);
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(&p)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -2770,6 +2879,13 @@ pub fn run() {
             let screenshot_notification_enabled = get_meta(&conn, "screenshot_notification_enabled")
                 .map(|v| v != "0")
                 .unwrap_or(true);
+            let default_screenshot_save_dir = get_default_screenshot_dir(app.handle())
+                .to_string_lossy()
+                .to_string();
+            let screenshot_save_dir = get_meta(&conn, "screenshot_save_dir")
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| default_screenshot_save_dir.clone());
+            let _ = std::fs::create_dir_all(&screenshot_save_dir);
             let clipboard_page_size = get_meta(&conn, "clipboard_page_size")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_CLIPBOARD_PAGE_SIZE);
@@ -2814,6 +2930,8 @@ pub fn run() {
                 clipboard_shortcut: clipboard_shortcut.clone(),
                 screenshot_shortcut: screenshot_shortcut.clone(),
                 screenshot_notification_enabled,
+                screenshot_save_dir,
+                default_screenshot_save_dir,
                 clipboard_page_size,
                 clipboard_lock_with_vault,
                 clipboard_enabled,
@@ -2946,6 +3064,8 @@ pub fn run() {
             set_screenshot_shortcut,
             get_screenshot_settings,
             update_screenshot_settings,
+            pick_screenshot_folder,
+            open_screenshot_folder,
             extract_text_from_image,
             // App settings (theme & language)
             get_app_config,
