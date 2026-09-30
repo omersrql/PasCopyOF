@@ -2,6 +2,7 @@
  * ManagerPage.tsx — Vault management interface.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { TaskPlanner } from "../components/TaskPlanner";
 import { ToastContainer } from "../components/Toast";
@@ -275,6 +276,13 @@ export default function ManagerPage() {
         loadSettings();
       }
     });
+
+    const unlisten = listen("open-task-in-manager", () => {
+      setActiveTab("tasks");
+    });
+    return () => {
+      unlisten.then((u) => u());
+    };
   }, []);
 
   useEffect(() => {

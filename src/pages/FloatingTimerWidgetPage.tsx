@@ -2,8 +2,9 @@
  * FloatingTimerWidgetPage.tsx — Compact always-on-top draggable mini timer pill.
  */
 import { useState, useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   getTimerStatus,
   startTaskTimer,
@@ -21,6 +22,8 @@ export default function FloatingTimerWidgetPage() {
     autoPausedTask: null,
   });
   const [secondsTick, setSecondsTick] = useState<number>(0);
+  const [lastTaskId, setLastTaskId] = useState<number | null>(null);
+  const [lastTaskTitle, setLastTaskTitle] = useState<string>("");
 
   const formatDigital = (totalSecs: number) => {
     const s = Math.max(0, totalSecs);
@@ -37,6 +40,11 @@ export default function FloatingTimerWidgetPage() {
       setStatus(s);
       if (s.activeTimer) {
         setSecondsTick(s.activeTimer.elapsedSeconds);
+        setLastTaskId(s.activeTimer.taskId);
+        setLastTaskTitle(s.activeTimer.taskTitle);
+      } else if (s.autoPausedTask) {
+        setLastTaskId(s.autoPausedTask.taskId);
+        setLastTaskTitle(s.autoPausedTask.title);
       }
     } catch (err) {
       console.error("Failed to sync timer status:", err);
@@ -54,8 +62,8 @@ export default function FloatingTimerWidgetPage() {
     listen("timer-auto-paused", () => syncStatus()).then((u) => unlistens.push(u));
     listen("timer-auto-resumed", () => syncStatus()).then((u) => unlistens.push(u));
 
-    // Periodic safety check every 5 seconds
-    const pollInterval = window.setInterval(syncStatus, 5000);
+    // Periodic safety sync every 3 seconds
+    const pollInterval = window.setInterval(syncStatus, 3000);
 
     return () => {
       window.clearInterval(pollInterval);
@@ -72,43 +80,93 @@ export default function FloatingTimerWidgetPage() {
     return () => clearInterval(interval);
   }, [status.isRunning, status.isAutoPaused]);
 
-  const handleTogglePlay = async () => {
-    if (status.isRunning && status.activeTimer) {
-      await stopTaskTimer(status.activeTimer.taskId);
-      syncStatus();
-    } else if (status.isAutoPaused && status.autoPausedTask) {
-      await startTaskTimer(status.autoPausedTask.taskId);
-      syncStatus();
+  // Start window dragging natively via Tauri on mouse down
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Only drag with left mouse button and not on button elements
+    if (e.button === 0 && !(e.target as HTMLElement).closest("button")) {
+      try {
+        getCurrentWebviewWindow().startDragging();
+      } catch (err) {
+        console.error("startDragging error:", err);
+      }
     }
   };
 
-  const handleMarkDone = async () => {
-    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId;
+  // Double click anywhere on widget opens Manager and navigates to this task
+  const handleDoubleClick = async (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
+    try {
+      await invoke("open_manager");
+      if (tid) {
+        await emit("open-task-in-manager", { taskId: tid });
+      }
+    } catch (err) {
+      console.error("Open manager error:", err);
+    }
+  };
+
+  // Toggle play/pause/resume
+  const handleTogglePlay = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (status.isRunning && status.activeTimer) {
+      // Pause
+      await stopTaskTimer(status.activeTimer.taskId);
+      syncStatus();
+    } else {
+      // Start or Resume
+      const tid = status.autoPausedTask?.taskId || lastTaskId || status.activeTimer?.taskId;
+      if (tid) {
+        await startTaskTimer(tid);
+        syncStatus();
+      }
+    }
+  };
+
+  // Mark current task done
+  const handleMarkDone = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
     if (tid) {
       await toggleTaskStatus(tid);
       syncStatus();
     }
   };
 
-  const handleOpenManager = async () => {
+  // Open Manager
+  const handleOpenManager = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
     try {
       await invoke("open_manager");
+      if (tid) {
+        await emit("open-task-in-manager", { taskId: tid });
+      }
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleClose = async () => {
+  // Close / Hide widget
+  const handleClose = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     await hideTimerWidget();
   };
 
   const currentTitle =
     status.activeTimer?.taskTitle ||
     status.autoPausedTask?.title ||
+    lastTaskTitle ||
     "PasCopyOf Focus";
 
+  const hasTask = Boolean(status.activeTimer || status.autoPausedTask || lastTaskId);
+
   return (
-    <div className="floating-widget-wrapper">
+    <div
+      className="floating-widget-wrapper"
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+    >
       <div
         className={`floating-timer-pill ${
           status.isRunning
@@ -120,11 +178,15 @@ export default function FloatingTimerWidgetPage() {
         data-tauri-drag-region
       >
         {/* Drag handle */}
-        <div className="widget-drag-handle" data-tauri-drag-region title="Sürüklemek için basılı tutun">
+        <div
+          className="widget-drag-handle"
+          data-tauri-drag-region
+          title="Sürüklemek için basılı tutun | Çift tıklayarak görevi açın"
+        >
           ⋮⋮
         </div>
 
-        {/* Pulse Dot */}
+        {/* Status Indicator Dot */}
         <div
           className={`widget-status-dot ${
             status.isRunning
@@ -135,16 +197,20 @@ export default function FloatingTimerWidgetPage() {
           }`}
           title={
             status.isRunning
-              ? "Sayaç çalışıyor"
+              ? "Sayaç çalışıyor (Çift tık: Göreve git)"
               : status.isAutoPaused
               ? "Boşta / Ekran Kilitlendi (Hareket bekleniyor)"
-              : "Durduruldu"
+              : "Durduruldu (Çift tık: Göreve git)"
           }
         />
 
         {/* Info & Timer */}
-        <div className="widget-info" data-tauri-drag-region>
-          <div className="widget-title" title={currentTitle}>
+        <div
+          className="widget-info"
+          data-tauri-drag-region
+          title={`${currentTitle} (Çift tıklayarak görev detayına gidin)`}
+        >
+          <div className="widget-title">
             {status.isAutoPaused ? `[Boşta] ${currentTitle}` : currentTitle}
           </div>
           <div className="widget-time">
@@ -154,18 +220,18 @@ export default function FloatingTimerWidgetPage() {
 
         {/* Actions */}
         <div className="widget-actions">
-          {(status.isRunning || status.isAutoPaused) && (
+          {hasTask && (
             <button
               type="button"
               className="widget-btn btn-play"
               onClick={handleTogglePlay}
-              title={status.isRunning ? "Duraklat" : "Devam Et"}
+              title={status.isRunning ? "Sayacı Duraklat" : "Sayacı Başlat / Devam Et"}
             >
               {status.isRunning ? "⏸️" : "▶️"}
             </button>
           )}
 
-          {(status.isRunning || status.isAutoPaused) && (
+          {hasTask && (
             <button
               type="button"
               className="widget-btn btn-done"
@@ -180,7 +246,7 @@ export default function FloatingTimerWidgetPage() {
             type="button"
             className="widget-btn btn-manager"
             onClick={handleOpenManager}
-            title="Yöneticiyi Aç"
+            title="Yönetici Ekranında Aç (Çift tık ile de açılır)"
           >
             ↗
           </button>
@@ -189,7 +255,7 @@ export default function FloatingTimerWidgetPage() {
             type="button"
             className="widget-btn btn-close"
             onClick={handleClose}
-            title="Gizle"
+            title="Widget'ı Gizle"
           >
             ✕
           </button>

@@ -127,6 +127,12 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
 
     listen("timer-started", () => loadData()).then((u) => unlistens.push(u));
     listen("timer-stopped", () => loadData()).then((u) => unlistens.push(u));
+    listen("open-task-in-manager", (event: any) => {
+      loadData();
+      if (event.payload?.taskId) {
+        setSelectedTaskId(event.payload.taskId);
+      }
+    }).then((u) => unlistens.push(u));
 
     return () => {
       unlistens.forEach((u) => u());
