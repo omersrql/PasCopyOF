@@ -59,13 +59,27 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeTask = tasks.find((t) => t.id === selectedTaskId) || null;
 
-  // Format seconds to "1s 45dk" or "45dk"
+  // Format seconds to "1s 45dk 10sn", "1dk 30sn" or "45sn"
   const formatDurationFriendly = (secs: number) => {
-    if (!secs || secs <= 0) return "0dk";
+    const sUnit = lang === "tr" ? "sn" : "s";
+    const mUnit = lang === "tr" ? "dk" : "m";
+    const hUnit = lang === "tr" ? "s" : "h";
+
+    if (!secs || secs <= 0) return `0${sUnit}`;
     const h = Math.floor(secs / 3600);
     const m = Math.floor((secs % 3600) / 60);
-    if (h > 0) return `${h}s ${m}dk`;
-    return `${m}dk`;
+    const s = Math.floor(secs % 60);
+
+    if (h > 0) {
+      if (m > 0 && s > 0) return `${h}${hUnit} ${m}${mUnit} ${s}${sUnit}`;
+      if (m > 0) return `${h}${hUnit} ${m}${mUnit}`;
+      if (s > 0) return `${h}${hUnit} ${s}${sUnit}`;
+      return `${h}${hUnit}`;
+    }
+    if (m > 0) {
+      return s > 0 ? `${m}${mUnit} ${s}${sUnit}` : `${m}${mUnit}`;
+    }
+    return `${s}${sUnit}`;
   };
 
   // Format seconds to "01:24:35"

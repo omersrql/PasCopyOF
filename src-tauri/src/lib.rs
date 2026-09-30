@@ -3678,10 +3678,25 @@ async fn get_daily_summary(
     let fmt_duration = |secs: i64| -> String {
         let h = secs / 3600;
         let m = (secs % 3600) / 60;
+        let s = secs % 60;
         if h > 0 {
-            format!("{}s {}dk", h, m)
+            if m > 0 && s > 0 {
+                format!("{}s {}dk {}sn", h, m, s)
+            } else if m > 0 {
+                format!("{}s {}dk", h, m)
+            } else if s > 0 {
+                format!("{}s {}sn", h, s)
+            } else {
+                format!("{}s", h)
+            }
+        } else if m > 0 {
+            if s > 0 {
+                format!("{}dk {}sn", m, s)
+            } else {
+                format!("{}dk", m)
+            }
         } else {
-            format!("{}dk", m)
+            format!("{}sn", s)
         }
     };
 
@@ -4100,5 +4115,39 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sqlite_duration() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO tasks (title) VALUES ('test')",
+            [],
+        ).unwrap();
+        let tid = conn.last_insert_rowid();
+
+        // Simulate start 45 seconds ago
+        conn.execute(
+            "INSERT INTO task_worklogs (task_id, start_time, end_time, duration_seconds)
+             VALUES (?1, datetime('now', 'localtime', '-45 seconds'), NULL, 0)",
+            params![tid],
+        ).unwrap();
+
+        stop_running_timers(&conn, Some(tid)).unwrap();
+
+        let dur: i64 = conn.query_row(
+            "SELECT duration_seconds FROM task_worklogs WHERE task_id = ?1",
+            params![tid],
+            |r| r.get(0),
+        ).unwrap();
+
+        println!("Calculated duration: {} seconds", dur);
+        assert!(dur >= 44 && dur <= 46);
+    }
 }
 
