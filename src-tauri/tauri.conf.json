@@ -58,6 +58,22 @@
         "alwaysOnTop": true,
         "shadow": false,
         "focus": true
+      },
+      {
+        "label": "timer-widget",
+        "title": "PasCopyOf Timer",
+        "url": "/#/timer-widget",
+        "width": 280,
+        "height": 56,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "center": false,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "focus": false
       }
     ],
     "security": {

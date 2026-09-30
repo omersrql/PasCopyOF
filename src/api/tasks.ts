@@ -51,6 +51,25 @@ export interface DailySummary {
   markdownSummary: string;
 }
 
+export interface TimerStatusInfo {
+  isRunning: boolean;
+  isAutoPaused: boolean;
+  activeTimer: ActiveTimerInfo | null;
+  autoPausedTask: { taskId: number; title: string } | null;
+}
+
+export async function showTimerWidget(): Promise<void> {
+  await invoke("show_timer_widget");
+}
+
+export async function hideTimerWidget(): Promise<void> {
+  await invoke("hide_timer_widget");
+}
+
+export async function getTimerStatus(): Promise<TimerStatusInfo> {
+  return await invoke<TimerStatusInfo>("get_timer_status");
+}
+
 export async function getTasks(filterStatus?: string, search?: string): Promise<TaskItem[]> {
   return await invoke<TaskItem[]>("get_tasks", {
     filterStatus: filterStatus || null,

@@ -61,6 +61,8 @@ pub struct AppState {
     pub last_vault_password: Option<String>,
     pub ignore_clipboard_change: bool,
     pub clipboard_image_cache: Arc<Mutex<HashMap<String, String>>>,
+    pub active_timer_auto_paused: Option<(i64, String)>,
+    pub timer_auto_pause_enabled: bool,
 }
 
 pub struct SafeAppState(pub Mutex<AppState>);
@@ -177,6 +179,22 @@ pub struct DailySummary {
     pub completed_tasks_count: i64,
     pub in_progress_tasks_count: i64,
     pub markdown_summary: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TimerStatusInfo {
+    pub is_running: bool,
+    pub is_auto_paused: bool,
+    pub active_timer: Option<ActiveTimerInfo>,
+    pub auto_paused_task: Option<PausedTaskInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PausedTaskInfo {
+    pub task_id: i64,
+    pub title: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -2908,6 +2926,67 @@ async fn trigger_auto_paste() -> Result<(), String> {
     Ok(())
 }
 
+// ─── System Idle & Screen Lock Detection ────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+fn get_system_idle_seconds() -> u64 {
+    #[repr(C)]
+    struct LASTINPUTINFO {
+        cb_size: u32,
+        dw_time: u32,
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32;
+        fn GetTickCount() -> u32;
+    }
+    unsafe {
+        let mut lii = LASTINPUTINFO {
+            cb_size: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dw_time: 0,
+        };
+        if GetLastInputInfo(&mut lii) != 0 {
+            let tc = GetTickCount();
+            if tc >= lii.dw_time {
+                ((tc - lii.dw_time) / 1000) as u64
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_system_idle_seconds() -> u64 {
+    0
+}
+
+#[cfg(target_os = "windows")]
+fn is_system_locked() -> bool {
+    #[link(name = "user32")]
+    extern "system" {
+        fn OpenInputDesktop(dw_flags: u32, f_inherit: i32, dw_desired_access: u32) -> isize;
+        fn CloseDesktop(h_desktop: isize) -> i32;
+    }
+    const DESKTOP_SWITCHDESKTOP: u32 = 0x0100;
+    unsafe {
+        let desk = OpenInputDesktop(0, 0, DESKTOP_SWITCHDESKTOP);
+        if desk == 0 {
+            true
+        } else {
+            CloseDesktop(desk);
+            false
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_system_locked() -> bool {
+    false
+}
+
 // ─── Task & Focus Management Helpers & Commands ─────────────────────────────
 
 fn get_task_by_id(conn: &Connection, task_id: i64) -> Result<TaskItem, String> {
@@ -3213,58 +3292,146 @@ async fn toggle_task_status(state: State<'_, SafeAppState>, id: i64) -> Result<T
 
 #[tauri::command]
 async fn start_task_timer(
+    app: AppHandle,
     state: State<'_, SafeAppState>,
     task_id: i64,
 ) -> Result<ActiveTimerInfo, String> {
-    let st = state.0.lock().map_err(|e| e.to_string())?;
-    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    let (worklog_id, task_title, start_time) = {
+        let mut st = state.0.lock().map_err(|e| e.to_string())?;
+        st.active_timer_auto_paused = None;
+        let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
 
-    // 1. Stop any currently running timers
-    stop_running_timers(&conn, None)?;
+        // 1. Stop any currently running timers
+        stop_running_timers(&conn, None)?;
 
-    // 2. Set task status to in_progress if currently todo
-    conn.execute(
-        "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?1 AND status = 'todo'",
-        params![task_id],
-    ).map_err(|e| e.to_string())?;
+        // 2. Set task status to in_progress if currently todo
+        conn.execute(
+            "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?1 AND status = 'todo'",
+            params![task_id],
+        ).map_err(|e| e.to_string())?;
 
-    // 3. Insert new worklog entry
-    conn.execute(
-        "INSERT INTO task_worklogs (task_id, start_time, end_time, duration_seconds, note)
-         VALUES (?1, datetime('now', 'localtime'), NULL, 0, '')",
-        params![task_id],
-    ).map_err(|e| e.to_string())?;
+        // 3. Insert new worklog entry
+        conn.execute(
+            "INSERT INTO task_worklogs (task_id, start_time, end_time, duration_seconds, note)
+             VALUES (?1, datetime('now', 'localtime'), NULL, 0, '')",
+            params![task_id],
+        ).map_err(|e| e.to_string())?;
 
-    let worklog_id = conn.last_insert_rowid();
-    let task_title: String = conn.query_row(
-        "SELECT title FROM tasks WHERE id = ?1",
-        params![task_id],
-        |row| row.get(0),
-    ).unwrap_or_else(|_| "Görev".to_string());
+        let wid = conn.last_insert_rowid();
+        let title: String = conn.query_row(
+            "SELECT title FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        ).unwrap_or_else(|_| "Görev".to_string());
 
-    let start_time: String = conn.query_row(
-        "SELECT start_time FROM task_worklogs WHERE id = ?1",
-        params![worklog_id],
-        |row| row.get(0),
-    ).unwrap_or_default();
+        let stime: String = conn.query_row(
+            "SELECT start_time FROM task_worklogs WHERE id = ?1",
+            params![wid],
+            |row| row.get(0),
+        ).unwrap_or_default();
 
-    Ok(ActiveTimerInfo {
+        (wid, title, stime)
+    };
+
+    let info = ActiveTimerInfo {
         worklog_id,
         task_id,
         task_title,
         start_time,
         elapsed_seconds: 0,
-    })
+    };
+
+    let _ = show_timer_widget(app.clone()).await;
+    let _ = app.emit("timer-started", &info);
+
+    Ok(info)
 }
 
 #[tauri::command]
 async fn stop_task_timer(
+    app: AppHandle,
     state: State<'_, SafeAppState>,
     task_id: Option<i64>,
 ) -> Result<(), String> {
-    let st = state.0.lock().map_err(|e| e.to_string())?;
-    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
-    stop_running_timers(&conn, task_id)
+    {
+        let mut st = state.0.lock().map_err(|e| e.to_string())?;
+        st.active_timer_auto_paused = None;
+        let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+        stop_running_timers(&conn, task_id)?;
+    }
+    let _ = app.emit("timer-stopped", task_id);
+    Ok(())
+}
+
+#[tauri::command]
+async fn show_timer_widget(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("timer-widget") {
+        if let Ok(Some(mon)) = w.current_monitor() {
+            let size = mon.size();
+            let scale = mon.scale_factor();
+            let screen_w = size.width as f64 / scale;
+            let x = (screen_w - 290.0).max(20.0);
+            let y = 30.0;
+            let _ = w.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+        }
+        let _ = w.show();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn hide_timer_widget(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("timer-widget") {
+        let _ = w.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_timer_status(
+    state: State<'_, SafeAppState>,
+) -> Result<TimerStatusInfo, String> {
+    let (auto_paused, db_path) = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        (st.active_timer_auto_paused.clone(), st.db_path.clone())
+    };
+
+    let active_timer = {
+        let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+        let query = "SELECT w.id, w.task_id, t.title, w.start_time,
+                            MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', w.start_time) AS INTEGER)) as elapsed
+                     FROM task_worklogs w
+                     JOIN tasks t ON t.id = w.task_id
+                     WHERE w.end_time IS NULL
+                     ORDER BY w.start_time DESC
+                     LIMIT 1";
+
+        let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+        let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+
+        if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+            Some(ActiveTimerInfo {
+                worklog_id: row.get(0).map_err(|e| e.to_string())?,
+                task_id: row.get(1).map_err(|e| e.to_string())?,
+                task_title: row.get(2).map_err(|e| e.to_string())?,
+                start_time: row.get(3).map_err(|e| e.to_string())?,
+                elapsed_seconds: row.get(4).map_err(|e| e.to_string())?,
+            })
+        } else {
+            None
+        }
+    };
+
+    let is_running = active_timer.is_some();
+    let is_auto_paused = auto_paused.is_some();
+    let auto_paused_task = auto_paused.map(|(id, title)| PausedTaskInfo { task_id: id, title });
+
+    Ok(TimerStatusInfo {
+        is_running,
+        is_auto_paused,
+        active_timer,
+        auto_paused_task,
+    })
 }
 
 #[tauri::command]
@@ -3703,6 +3870,8 @@ pub fn run() {
                 last_vault_password: None,
                 ignore_clipboard_change: false,
                 clipboard_image_cache: Arc::new(Mutex::new(HashMap::new())),
+                active_timer_auto_paused: None,
+                timer_auto_pause_enabled: true,
             })));
 
             #[cfg(target_os = "windows")]
@@ -3727,6 +3896,88 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("launcher") {
                 window.show()?;
             }
+
+            // Task Timer Auto-Pause on Idle / Lock & Auto-Resume on Activity
+            let handle_timer = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut was_inactive = false;
+                loop {
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    let idle_secs = get_system_idle_seconds();
+                    let locked = is_system_locked();
+                    let is_now_inactive = locked || idle_secs >= 60;
+
+                    let state = handle_timer.state::<SafeAppState>();
+
+                    if is_now_inactive && !was_inactive {
+                        let mut paused_task = None;
+                        if let Ok(mut st) = state.0.lock() {
+                            if st.timer_auto_pause_enabled {
+                                if let Ok(conn) = open_db(&st.db_path) {
+                                    let running_timer: Option<(i64, String)> = conn.query_row(
+                                        "SELECT w.task_id, t.title
+                                         FROM task_worklogs w
+                                         JOIN tasks t ON t.id = w.task_id
+                                         WHERE w.end_time IS NULL
+                                         ORDER BY w.start_time DESC
+                                         LIMIT 1",
+                                        [],
+                                        |row| Ok((row.get(0)?, row.get(1)?)),
+                                    ).ok();
+
+                                    if let Some((tid, title)) = running_timer {
+                                        let deduct = if locked { 0 } else { idle_secs.min(60) };
+                                        let _ = conn.execute(
+                                            "UPDATE task_worklogs
+                                             SET end_time = datetime('now', 'localtime'),
+                                                 duration_seconds = MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', start_time) AS INTEGER) - ?1)
+                                             WHERE task_id = ?2 AND end_time IS NULL",
+                                            params![deduct as i64, tid],
+                                        );
+                                        st.active_timer_auto_paused = Some((tid, title.clone()));
+                                        paused_task = Some((tid, title, if locked { "locked" } else { "idle" }));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((tid, title, reason)) = paused_task {
+                            let _ = handle_timer.emit("timer-auto-paused", serde_json::json!({
+                                "taskId": tid,
+                                "title": title,
+                                "reason": reason
+                            }));
+                        }
+                        was_inactive = true;
+                    } else if !is_now_inactive && was_inactive {
+                        let mut resumed_task = None;
+                        if let Ok(mut st) = state.0.lock() {
+                            if st.timer_auto_pause_enabled {
+                                if let Some((tid, title)) = st.active_timer_auto_paused.take() {
+                                    if let Ok(conn) = open_db(&st.db_path) {
+                                        let _ = conn.execute(
+                                            "INSERT INTO task_worklogs (task_id, start_time, end_time, duration_seconds, note)
+                                             VALUES (?1, datetime('now', 'localtime'), NULL, 0, '')",
+                                            params![tid],
+                                        );
+                                        let _ = conn.execute(
+                                            "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?1",
+                                            params![tid],
+                                        );
+                                        resumed_task = Some((tid, title));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((tid, title)) = resumed_task {
+                            let _ = handle_timer.emit("timer-auto-resumed", serde_json::json!({
+                                "taskId": tid,
+                                "title": title
+                            }));
+                        }
+                        was_inactive = false;
+                    }
+                }
+            });
 
             // Background idle checker
             let handle = app.handle().clone();
@@ -3843,6 +4094,9 @@ pub fn run() {
             toggle_task_checklist,
             delete_task_checklist,
             get_daily_summary,
+            show_timer_widget,
+            hide_timer_widget,
+            get_timer_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

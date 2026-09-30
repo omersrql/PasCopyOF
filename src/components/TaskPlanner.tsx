@@ -2,6 +2,7 @@
  * TaskPlanner.tsx — Focus & Daily Task Planner with Worklog / Time Tracker
  */
 import { useState, useEffect, useRef, useCallback } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   getTasks,
   createTask,
@@ -18,6 +19,7 @@ import {
   toggleTaskChecklist,
   deleteTaskChecklist,
   getDailySummary,
+  showTimerWidget,
 } from "../api/tasks";
 import type {
   TaskItem,
@@ -100,7 +102,36 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+
+    const unlistens: Array<() => void> = [];
+    listen("timer-auto-paused", (event: any) => {
+      loadData();
+      const reason = event.payload?.reason === "locked" ? "Ekran kilitlendiği" : "1 dk hareketsizlik";
+      showToast(
+        lang === "tr"
+          ? `⏸️ ${reason} için sayaç otomatik duraklatıldı.`
+          : `⏸️ Timer auto-paused due to inactivity/lock.`,
+        "info"
+      );
+    }).then((u) => unlistens.push(u));
+
+    listen("timer-auto-resumed", () => {
+      loadData();
+      showToast(
+        lang === "tr"
+          ? `▶️ Tekrar hoş geldiniz! Sayaç kaldığı yerden devam ediyor.`
+          : `▶️ Welcome back! Timer resumed.`,
+        "success"
+      );
+    }).then((u) => unlistens.push(u));
+
+    listen("timer-started", () => loadData()).then((u) => unlistens.push(u));
+    listen("timer-stopped", () => loadData()).then((u) => unlistens.push(u));
+
+    return () => {
+      unlistens.forEach((u) => u());
+    };
+  }, [loadData, lang, showToast]);
 
   // If a task is selected, load its checklist and worklogs
   useEffect(() => {
@@ -355,6 +386,15 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
               </button>
             </div>
           )}
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => showTimerWidget()}
+            title={lang === "tr" ? "Masaüstünde yüzen küçük sayacı aç" : "Open floating desktop timer"}
+          >
+            📌 {lang === "tr" ? "Yüzen Sayaç" : "Mini Widget"}
+          </button>
 
           <button
             type="button"
