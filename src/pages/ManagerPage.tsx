@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
+import { TaskPlanner } from "../components/TaskPlanner";
 import { ToastContainer } from "../components/Toast";
 import { useToast } from "../hooks/useToast";
 import { useVaultLock } from "../hooks/useVaultLock";
@@ -97,6 +98,7 @@ function shortcutFromEvent(e: KeyboardEvent): string | null {
 export default function ManagerPage() {
   const { theme, setTheme, lang, setLanguage, t } = useApp();
   const [unlocked, setUnlocked] = useState(false);
+  const [activeTab, setActiveTab] = useState<"vault" | "tasks">("vault");
   const [credentials, setCredentials] = useState<CredentialSafe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -595,17 +597,42 @@ export default function ManagerPage() {
       {unlocked && (
         <>
           <div className="manager-topbar">
-            <div className="manager-logo">
-              <div className="manager-logo-dot" />
-              {t("topbarAdmin")}
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div className="manager-logo">
+                <div className="manager-logo-dot" />
+                {t("topbarAdmin")}
+              </div>
+              <div className="manager-nav-tabs">
+                <button
+                  type="button"
+                  className={`manager-tab-btn ${activeTab === "vault" ? "active" : ""}`}
+                  onClick={() => setActiveTab("vault")}
+                >
+                  🔐 {t("tabVault")}
+                </button>
+                <button
+                  type="button"
+                  className={`manager-tab-btn ${activeTab === "tasks" ? "active" : ""}`}
+                  onClick={() => setActiveTab("tasks")}
+                >
+                  🎯 {t("tabTasks")}
+                </button>
+              </div>
             </div>
-            <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-              {t("topbarCredentialsCount", { count: credentials.length })}
-            </span>
+
+            {activeTab === "vault" && (
+              <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                {t("topbarCredentialsCount", { count: credentials.length })}
+              </span>
+            )}
 
             <div className="manager-topbar-right">
-              <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>{t("topbarCategories")}</button>
-              <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
+              {activeTab === "vault" && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => setShowCategoryManager(true)}>{t("topbarCategories")}</button>
+                  <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
+                </>
+              )}
               <button className="btn btn-secondary" onClick={() => {
                 setShowChangePassword(true);
                 loadSettings();
@@ -614,15 +641,18 @@ export default function ManagerPage() {
             </div>
           </div>
 
-          <div className="manager-content">
-            <div className="credential-list-panel">
-              <div className="list-header">
-                <div className="list-search">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder={t("credSearchPlaceholder")}
-                    value={searchQuery}
+          {activeTab === "tasks" && <TaskPlanner showToast={showToast} />}
+
+          {activeTab === "vault" && (
+            <div className="manager-content">
+              <div className="credential-list-panel">
+                <div className="list-header">
+                  <div className="list-search">
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      placeholder={t("credSearchPlaceholder")}
+                      value={searchQuery}
                     onChange={handleSearchChange}
                   />
                 </div>
@@ -765,6 +795,7 @@ export default function ManagerPage() {
               )}
             </div>
           </div>
+          )}
 
           {showDeleteConfirm && (
             <div className="modal-overlay">

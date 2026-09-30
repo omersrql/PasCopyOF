@@ -116,6 +116,69 @@ pub struct AppConfig {
     pub language: String,
 }
 
+// ─── Task & Focus Tracker Models ─────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskItem {
+    pub id: i64,
+    pub title: String,
+    pub notes: String,
+    pub status: String,
+    pub priority: String,
+    pub category: String,
+    pub is_routine: bool,
+    pub routine_schedule: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+    pub total_duration_seconds: i64,
+    pub checklist_count: i64,
+    pub checklist_done_count: i64,
+    pub is_timer_running: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskWorklog {
+    pub id: i64,
+    pub task_id: i64,
+    pub start_time: String,
+    pub end_time: Option<String>,
+    pub duration_seconds: i64,
+    pub note: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskChecklistItem {
+    pub id: i64,
+    pub task_id: i64,
+    pub title: String,
+    pub is_done: bool,
+    pub sort_order: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveTimerInfo {
+    pub worklog_id: i64,
+    pub task_id: i64,
+    pub task_title: String,
+    pub start_time: String,
+    pub elapsed_seconds: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DailySummary {
+    pub date: String,
+    pub total_seconds: i64,
+    pub completed_tasks_count: i64,
+    pub in_progress_tasks_count: i64,
+    pub markdown_summary: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Category {
     pub id: i64,
@@ -242,7 +305,45 @@ fn init_db_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_clipboard_copied_at ON clipboard_history (copied_at DESC);
         CREATE INDEX IF NOT EXISTS idx_clipboard_pinned ON clipboard_history (is_pinned);
         CREATE INDEX IF NOT EXISTS idx_clipboard_pinned_copied ON clipboard_history (is_pinned DESC, copied_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_clipboard_type_pinned ON clipboard_history (content_type, is_pinned DESC, copied_at DESC);",
+        CREATE INDEX IF NOT EXISTS idx_clipboard_type_pinned ON clipboard_history (content_type, is_pinned DESC, copied_at DESC);
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            title            TEXT    NOT NULL,
+            notes            TEXT    NOT NULL DEFAULT '',
+            status           TEXT    NOT NULL DEFAULT 'todo',
+            priority         TEXT    NOT NULL DEFAULT 'medium',
+            category         TEXT    NOT NULL DEFAULT '',
+            is_routine       INTEGER NOT NULL DEFAULT 0,
+            routine_schedule TEXT    NOT NULL DEFAULT '',
+            created_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+            completed_at     TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);
+        CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks (created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS task_worklogs (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id          INTEGER NOT NULL,
+            start_time       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+            end_time         TEXT,
+            duration_seconds INTEGER NOT NULL DEFAULT 0,
+            note             TEXT    NOT NULL DEFAULT '',
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_worklogs_task_id ON task_worklogs (task_id);
+        CREATE INDEX IF NOT EXISTS idx_worklogs_start_time ON task_worklogs (start_time DESC);
+
+        CREATE TABLE IF NOT EXISTS task_checklists (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id    INTEGER NOT NULL,
+            title      TEXT    NOT NULL,
+            is_done    INTEGER NOT NULL DEFAULT 0,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_checklists_task_id ON task_checklists (task_id);",
     )?;
 
     let table_info: Vec<String> = {
@@ -2807,6 +2908,660 @@ async fn trigger_auto_paste() -> Result<(), String> {
     Ok(())
 }
 
+// ─── Task & Focus Management Helpers & Commands ─────────────────────────────
+
+fn get_task_by_id(conn: &Connection, task_id: i64) -> Result<TaskItem, String> {
+    let query = "SELECT
+            t.id,
+            t.title,
+            t.notes,
+            t.status,
+            t.priority,
+            t.category,
+            t.is_routine,
+            t.routine_schedule,
+            t.created_at,
+            t.updated_at,
+            t.completed_at,
+            COALESCE((
+                SELECT SUM(
+                    CASE 
+                        WHEN w.end_time IS NOT NULL THEN w.duration_seconds
+                        ELSE MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', w.start_time) AS INTEGER))
+                    END
+                )
+                FROM task_worklogs w
+                WHERE w.task_id = t.id
+            ), 0) AS total_duration_seconds,
+            (SELECT COUNT(*) FROM task_checklists c WHERE c.task_id = t.id) AS checklist_count,
+            (SELECT COUNT(*) FROM task_checklists c WHERE c.task_id = t.id AND c.is_done = 1) AS checklist_done_count,
+            EXISTS (SELECT 1 FROM task_worklogs w WHERE w.task_id = t.id AND w.end_time IS NULL) AS is_timer_running
+        FROM tasks t
+        WHERE t.id = ?1";
+    conn.query_row(query, params![task_id], |row| {
+        let is_routine_i: i64 = row.get(6)?;
+        let is_timer_running_i: i64 = row.get(14)?;
+        Ok(TaskItem {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            notes: row.get(2)?,
+            status: row.get(3)?,
+            priority: row.get(4)?,
+            category: row.get(5)?,
+            is_routine: is_routine_i != 0,
+            routine_schedule: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+            completed_at: row.get(10)?,
+            total_duration_seconds: row.get(11)?,
+            checklist_count: row.get(12)?,
+            checklist_done_count: row.get(13)?,
+            is_timer_running: is_timer_running_i != 0,
+        })
+    }).map_err(|e| e.to_string())
+}
+
+fn stop_running_timers(conn: &Connection, task_id: Option<i64>) -> Result<(), String> {
+    if let Some(tid) = task_id {
+        conn.execute(
+            "UPDATE task_worklogs
+             SET end_time = datetime('now', 'localtime'),
+                 duration_seconds = MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', start_time) AS INTEGER))
+             WHERE task_id = ?1 AND end_time IS NULL",
+            params![tid],
+        ).map_err(|e| e.to_string())?;
+    } else {
+        conn.execute(
+            "UPDATE task_worklogs
+             SET end_time = datetime('now', 'localtime'),
+                 duration_seconds = MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', start_time) AS INTEGER))
+             WHERE end_time IS NULL",
+            [],
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_tasks(
+    state: State<'_, SafeAppState>,
+    filter_status: Option<String>,
+    search: Option<String>,
+) -> Result<Vec<TaskItem>, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let mut query = String::from(
+        "SELECT
+            t.id,
+            t.title,
+            t.notes,
+            t.status,
+            t.priority,
+            t.category,
+            t.is_routine,
+            t.routine_schedule,
+            t.created_at,
+            t.updated_at,
+            t.completed_at,
+            COALESCE((
+                SELECT SUM(
+                    CASE 
+                        WHEN w.end_time IS NOT NULL THEN w.duration_seconds
+                        ELSE MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', w.start_time) AS INTEGER))
+                    END
+                )
+                FROM task_worklogs w
+                WHERE w.task_id = t.id
+            ), 0) AS total_duration_seconds,
+            (SELECT COUNT(*) FROM task_checklists c WHERE c.task_id = t.id) AS checklist_count,
+            (SELECT COUNT(*) FROM task_checklists c WHERE c.task_id = t.id AND c.is_done = 1) AS checklist_done_count,
+            EXISTS (SELECT 1 FROM task_worklogs w WHERE w.task_id = t.id AND w.end_time IS NULL) AS is_timer_running
+        FROM tasks t
+        WHERE 1=1"
+    );
+
+    let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(ref st_filter) = filter_status {
+        if !st_filter.is_empty() && st_filter != "all" {
+            query.push_str(" AND t.status = ?");
+            params_vec.push(Box::new(st_filter.clone()));
+        }
+    }
+
+    if let Some(ref q) = search {
+        let trimmed = q.trim();
+        if !trimmed.is_empty() {
+            query.push_str(" AND (t.title LIKE ? OR t.notes LIKE ? OR t.category LIKE ?)");
+            let pattern = format!("%{}%", trimmed);
+            params_vec.push(Box::new(pattern.clone()));
+            params_vec.push(Box::new(pattern.clone()));
+            params_vec.push(Box::new(pattern));
+        }
+    }
+
+    query.push_str(" ORDER BY
+        CASE t.status WHEN 'in_progress' THEN 1 WHEN 'todo' THEN 2 ELSE 3 END,
+        CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        t.created_at DESC");
+
+    let params_slice: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params_slice.as_slice(), |row| {
+            let is_routine_i: i64 = row.get(6)?;
+            let is_timer_running_i: i64 = row.get(14)?;
+            Ok(TaskItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                notes: row.get(2)?,
+                status: row.get(3)?,
+                priority: row.get(4)?,
+                category: row.get(5)?,
+                is_routine: is_routine_i != 0,
+                routine_schedule: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+                completed_at: row.get(10)?,
+                total_duration_seconds: row.get(11)?,
+                checklist_count: row.get(12)?,
+                checklist_done_count: row.get(13)?,
+                is_timer_running: is_timer_running_i != 0,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+async fn create_task(
+    state: State<'_, SafeAppState>,
+    title: String,
+    notes: Option<String>,
+    priority: Option<String>,
+    category: Option<String>,
+    is_routine: Option<bool>,
+    routine_schedule: Option<String>,
+) -> Result<TaskItem, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let notes_val = notes.unwrap_or_default();
+    let priority_val = priority.unwrap_or_else(|| "medium".to_string());
+    let category_val = category.unwrap_or_default();
+    let is_routine_val = if is_routine.unwrap_or(false) { 1 } else { 0 };
+    let routine_sched_val = routine_schedule.unwrap_or_default();
+
+    conn.execute(
+        "INSERT INTO tasks (title, notes, status, priority, category, is_routine, routine_schedule, created_at, updated_at)
+         VALUES (?1, ?2, 'todo', ?3, ?4, ?5, ?6, datetime('now', 'localtime'), datetime('now', 'localtime'))",
+        params![
+            title.trim(),
+            notes_val,
+            priority_val,
+            category_val,
+            is_routine_val,
+            routine_sched_val,
+        ],
+    ).map_err(|e| e.to_string())?;
+
+    let last_id = conn.last_insert_rowid();
+    get_task_by_id(&conn, last_id)
+}
+
+#[tauri::command]
+async fn update_task(
+    state: State<'_, SafeAppState>,
+    id: i64,
+    title: String,
+    notes: String,
+    status: String,
+    priority: String,
+    category: String,
+    is_routine: bool,
+    routine_schedule: String,
+) -> Result<TaskItem, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let completed_at_update = if status == "done" {
+        "completed_at = COALESCE(completed_at, datetime('now', 'localtime')),"
+    } else {
+        "completed_at = NULL,"
+    };
+
+    let sql = format!(
+        "UPDATE tasks SET
+            title = ?1,
+            notes = ?2,
+            status = ?3,
+            priority = ?4,
+            category = ?5,
+            is_routine = ?6,
+            routine_schedule = ?7,
+            {}
+            updated_at = datetime('now', 'localtime')
+         WHERE id = ?8",
+        completed_at_update
+    );
+
+    conn.execute(
+        &sql,
+        params![
+            title.trim(),
+            notes,
+            status,
+            priority,
+            category,
+            if is_routine { 1 } else { 0 },
+            routine_schedule,
+            id,
+        ],
+    ).map_err(|e| e.to_string())?;
+
+    if status == "done" {
+        let _ = stop_running_timers(&conn, Some(id));
+    }
+
+    get_task_by_id(&conn, id)
+}
+
+#[tauri::command]
+async fn delete_task(state: State<'_, SafeAppState>, id: i64) -> Result<(), String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    conn.execute("DELETE FROM task_checklists WHERE task_id = ?1", params![id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM task_worklogs WHERE task_id = ?1", params![id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tasks WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn toggle_task_status(state: State<'_, SafeAppState>, id: i64) -> Result<TaskItem, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let cur_status: String = conn.query_row(
+        "SELECT status FROM tasks WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    let next_status = if cur_status == "done" { "todo" } else { "done" };
+    if next_status == "done" {
+        let _ = stop_running_timers(&conn, Some(id));
+        conn.execute(
+            "UPDATE tasks SET status = 'done', completed_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?1",
+            params![id],
+        ).map_err(|e| e.to_string())?;
+    } else {
+        conn.execute(
+            "UPDATE tasks SET status = 'todo', completed_at = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?1",
+            params![id],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    get_task_by_id(&conn, id)
+}
+
+#[tauri::command]
+async fn start_task_timer(
+    state: State<'_, SafeAppState>,
+    task_id: i64,
+) -> Result<ActiveTimerInfo, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    // 1. Stop any currently running timers
+    stop_running_timers(&conn, None)?;
+
+    // 2. Set task status to in_progress if currently todo
+    conn.execute(
+        "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?1 AND status = 'todo'",
+        params![task_id],
+    ).map_err(|e| e.to_string())?;
+
+    // 3. Insert new worklog entry
+    conn.execute(
+        "INSERT INTO task_worklogs (task_id, start_time, end_time, duration_seconds, note)
+         VALUES (?1, datetime('now', 'localtime'), NULL, 0, '')",
+        params![task_id],
+    ).map_err(|e| e.to_string())?;
+
+    let worklog_id = conn.last_insert_rowid();
+    let task_title: String = conn.query_row(
+        "SELECT title FROM tasks WHERE id = ?1",
+        params![task_id],
+        |row| row.get(0),
+    ).unwrap_or_else(|_| "Görev".to_string());
+
+    let start_time: String = conn.query_row(
+        "SELECT start_time FROM task_worklogs WHERE id = ?1",
+        params![worklog_id],
+        |row| row.get(0),
+    ).unwrap_or_default();
+
+    Ok(ActiveTimerInfo {
+        worklog_id,
+        task_id,
+        task_title,
+        start_time,
+        elapsed_seconds: 0,
+    })
+}
+
+#[tauri::command]
+async fn stop_task_timer(
+    state: State<'_, SafeAppState>,
+    task_id: Option<i64>,
+) -> Result<(), String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    stop_running_timers(&conn, task_id)
+}
+
+#[tauri::command]
+async fn get_active_timer(
+    state: State<'_, SafeAppState>,
+) -> Result<Option<ActiveTimerInfo>, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let query = "SELECT w.id, w.task_id, t.title, w.start_time,
+                        MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', w.start_time) AS INTEGER)) as elapsed
+                 FROM task_worklogs w
+                 JOIN tasks t ON t.id = w.task_id
+                 WHERE w.end_time IS NULL
+                 ORDER BY w.start_time DESC
+                 LIMIT 1";
+
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        Ok(Some(ActiveTimerInfo {
+            worklog_id: row.get(0).map_err(|e| e.to_string())?,
+            task_id: row.get(1).map_err(|e| e.to_string())?,
+            task_title: row.get(2).map_err(|e| e.to_string())?,
+            start_time: row.get(3).map_err(|e| e.to_string())?,
+            elapsed_seconds: row.get(4).map_err(|e| e.to_string())?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+async fn get_task_worklogs(
+    state: State<'_, SafeAppState>,
+    task_id: i64,
+) -> Result<Vec<TaskWorklog>, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, task_id, start_time, end_time,
+                CASE 
+                    WHEN end_time IS NOT NULL THEN duration_seconds
+                    ELSE MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', start_time) AS INTEGER))
+                END,
+                note
+         FROM task_worklogs
+         WHERE task_id = ?1
+         ORDER BY start_time DESC",
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map(params![task_id], |row| {
+        Ok(TaskWorklog {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            start_time: row.get(2)?,
+            end_time: row.get(3)?,
+            duration_seconds: row.get(4)?,
+            note: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut logs = Vec::new();
+    for r in rows {
+        logs.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(logs)
+}
+
+#[tauri::command]
+async fn delete_task_worklog(
+    state: State<'_, SafeAppState>,
+    id: i64,
+) -> Result<(), String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM task_worklogs WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_task_checklists(
+    state: State<'_, SafeAppState>,
+    task_id: i64,
+) -> Result<Vec<TaskChecklistItem>, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, task_id, title, is_done, sort_order
+         FROM task_checklists
+         WHERE task_id = ?1
+         ORDER BY sort_order ASC, id ASC",
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map(params![task_id], |row| {
+        let is_done_i: i64 = row.get(3)?;
+        Ok(TaskChecklistItem {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            title: row.get(2)?,
+            is_done: is_done_i != 0,
+            sort_order: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        list.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+async fn add_task_checklist(
+    state: State<'_, SafeAppState>,
+    task_id: i64,
+    title: String,
+) -> Result<TaskChecklistItem, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO task_checklists (task_id, title, is_done, sort_order)
+         VALUES (?1, ?2, 0, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM task_checklists WHERE task_id = ?1))",
+        params![task_id, title.trim()],
+    ).map_err(|e| e.to_string())?;
+
+    let last_id = conn.last_insert_rowid();
+    Ok(TaskChecklistItem {
+        id: last_id,
+        task_id,
+        title: title.trim().to_string(),
+        is_done: false,
+        sort_order: 0,
+    })
+}
+
+#[tauri::command]
+async fn toggle_task_checklist(
+    state: State<'_, SafeAppState>,
+    id: i64,
+) -> Result<TaskChecklistItem, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE task_checklists SET is_done = CASE WHEN is_done = 1 THEN 0 ELSE 1 END WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+
+    conn.query_row(
+        "SELECT id, task_id, title, is_done, sort_order FROM task_checklists WHERE id = ?1",
+        params![id],
+        |row| {
+            let is_done_i: i64 = row.get(3)?;
+            Ok(TaskChecklistItem {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                title: row.get(2)?,
+                is_done: is_done_i != 0,
+                sort_order: row.get(4)?,
+            })
+        },
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_task_checklist(
+    state: State<'_, SafeAppState>,
+    id: i64,
+) -> Result<(), String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM task_checklists WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_daily_summary(
+    state: State<'_, SafeAppState>,
+    date_str: Option<String>,
+) -> Result<DailySummary, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let target_date = match date_str {
+        Some(d) if !d.trim().is_empty() => d.trim().to_string(),
+        _ => {
+            conn.query_row("SELECT strftime('%Y-%m-%d', 'now', 'localtime')", [], |r| r.get(0))
+                .unwrap_or_else(|_| "2026-09-30".to_string())
+        }
+    };
+
+    let total_seconds: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(
+            CASE 
+                WHEN end_time IS NOT NULL THEN duration_seconds
+                ELSE MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', start_time) AS INTEGER))
+            END
+        ), 0)
+        FROM task_worklogs
+        WHERE date(start_time) = date(?1)",
+        params![target_date],
+        |row| row.get(0),
+    ).unwrap_or(0);
+
+    struct WorkSummaryItem {
+        title: String,
+        status: String,
+        duration: i64,
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT t.title, t.status,
+                COALESCE(SUM(
+                    CASE 
+                        WHEN w.end_time IS NOT NULL THEN w.duration_seconds
+                        ELSE MAX(0, CAST(strftime('%s', 'now', 'localtime') - strftime('%s', w.start_time) AS INTEGER))
+                    END
+                ), 0) as task_duration
+         FROM tasks t
+         LEFT JOIN task_worklogs w ON w.task_id = t.id AND date(w.start_time) = date(?1)
+         WHERE date(w.start_time) = date(?1) OR (date(t.completed_at) = date(?1))
+         GROUP BY t.id
+         ORDER BY task_duration DESC, t.title ASC"
+    ).map_err(|e| e.to_string())?;
+
+    let items = stmt.query_map(params![target_date], |row| {
+        Ok(WorkSummaryItem {
+            title: row.get(0)?,
+            status: row.get(1)?,
+            duration: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut completed_tasks_count = 0;
+    let mut in_progress_tasks_count = 0;
+    let mut completed_lines = Vec::new();
+    let mut active_lines = Vec::new();
+
+    let fmt_duration = |secs: i64| -> String {
+        let h = secs / 3600;
+        let m = (secs % 3600) / 60;
+        if h > 0 {
+            format!("{}s {}dk", h, m)
+        } else {
+            format!("{}dk", m)
+        }
+    };
+
+    for item in items.flatten() {
+        if item.status == "done" {
+            completed_tasks_count += 1;
+            completed_lines.push(format!("- [x] {} ({})", item.title, fmt_duration(item.duration)));
+        } else {
+            in_progress_tasks_count += 1;
+            active_lines.push(format!("- [ ] {} ({})", item.title, fmt_duration(item.duration)));
+        }
+    }
+
+    let total_time_str = fmt_duration(total_seconds);
+    let mut md = format!("## 📅 Günlük Çalışma Raporu: {} (Toplam Efor: {})\n\n", target_date, total_time_str);
+
+    if !completed_lines.is_empty() {
+        md.push_str("### ✅ Tamamlanan Görevler:\n");
+        for line in completed_lines {
+            md.push_str(&line);
+            md.push('\n');
+        }
+        md.push('\n');
+    }
+
+    if !active_lines.is_empty() {
+        md.push_str("### ⏳ Devam Eden Görevler:\n");
+        for line in active_lines {
+            md.push_str(&line);
+            md.push('\n');
+        }
+        md.push('\n');
+    }
+
+    if total_seconds == 0 && completed_tasks_count == 0 && in_progress_tasks_count == 0 {
+        md.push_str("_Bu tarihte henüz bir çalışma veya tamamlanan görev kaydı bulunmuyor._\n");
+    }
+
+    Ok(DailySummary {
+        date: target_date,
+        total_seconds,
+        completed_tasks_count,
+        in_progress_tasks_count,
+        markdown_summary: md,
+    })
+}
+
 #[cfg(target_os = "windows")]
 fn ensure_windows_notification_identity() {
     use std::ffi::OsStr;
@@ -3072,6 +3827,22 @@ pub fn run() {
             set_app_theme,
             set_app_language,
             trigger_auto_paste,
+            // Task & Focus tracker commands
+            get_tasks,
+            create_task,
+            update_task,
+            delete_task,
+            toggle_task_status,
+            start_task_timer,
+            stop_task_timer,
+            get_active_timer,
+            get_task_worklogs,
+            delete_task_worklog,
+            get_task_checklists,
+            add_task_checklist,
+            toggle_task_checklist,
+            delete_task_checklist,
+            get_daily_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");
