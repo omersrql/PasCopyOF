@@ -190,6 +190,7 @@ pub struct TimerStatusInfo {
     pub is_auto_paused: bool,
     pub active_timer: Option<ActiveTimerInfo>,
     pub auto_paused_task: Option<PausedTaskInfo>,
+    pub last_active_task: Option<PausedTaskInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -3206,6 +3207,7 @@ async fn get_tasks(
 
 #[tauri::command]
 async fn create_task(
+    app: AppHandle,
     state: State<'_, SafeAppState>,
     title: String,
     notes: Option<String>,
@@ -3237,11 +3239,14 @@ async fn create_task(
     ).map_err(|e| e.to_string())?;
 
     let last_id = conn.last_insert_rowid();
-    get_task_by_id(&conn, last_id)
+    let task = get_task_by_id(&conn, last_id)?;
+    let _ = app.emit("tasks-changed", ());
+    Ok(task)
 }
 
 #[tauri::command]
 async fn update_task(
+    app: AppHandle,
     state: State<'_, SafeAppState>,
     id: i64,
     title: String,
@@ -3292,48 +3297,72 @@ async fn update_task(
 
     if status == "done" {
         let _ = stop_running_timers(&conn, Some(id));
+        let _ = app.emit("timer-stopped", Some(id));
     }
 
-    get_task_by_id(&conn, id)
+    let task = get_task_by_id(&conn, id)?;
+    let _ = app.emit("task-updated", &task);
+    let _ = app.emit("tasks-changed", ());
+    Ok(task)
 }
 
 #[tauri::command]
-async fn delete_task(state: State<'_, SafeAppState>, id: i64) -> Result<(), String> {
+async fn delete_task(app: AppHandle, state: State<'_, SafeAppState>, id: i64) -> Result<(), String> {
     let st = state.0.lock().map_err(|e| e.to_string())?;
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
 
     conn.execute("DELETE FROM task_checklists WHERE task_id = ?1", params![id]).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM task_worklogs WHERE task_id = ?1", params![id]).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM tasks WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let _ = app.emit("tasks-changed", ());
+    let _ = app.emit("timer-stopped", Some(id));
     Ok(())
 }
 
 #[tauri::command]
-async fn toggle_task_status(state: State<'_, SafeAppState>, id: i64) -> Result<TaskItem, String> {
-    let st = state.0.lock().map_err(|e| e.to_string())?;
-    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+async fn toggle_task_status(
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+    id: i64,
+) -> Result<TaskItem, String> {
+    let task = {
+        let mut st = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some((paused_id, _)) = st.active_timer_auto_paused {
+            if paused_id == id {
+                st.active_timer_auto_paused = None;
+            }
+        }
+        let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
 
-    let cur_status: String = conn.query_row(
-        "SELECT status FROM tasks WHERE id = ?1",
-        params![id],
-        |row| row.get(0),
-    ).map_err(|e| e.to_string())?;
+        let cur_status: String = conn.query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ).map_err(|e| e.to_string())?;
 
-    let next_status = if cur_status == "done" { "todo" } else { "done" };
-    if next_status == "done" {
-        let _ = stop_running_timers(&conn, Some(id));
-        conn.execute(
-            "UPDATE tasks SET status = 'done', completed_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?1",
-            params![id],
-        ).map_err(|e| e.to_string())?;
-    } else {
-        conn.execute(
-            "UPDATE tasks SET status = 'todo', completed_at = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?1",
-            params![id],
-        ).map_err(|e| e.to_string())?;
+        let next_status = if cur_status == "done" { "todo" } else { "done" };
+        if next_status == "done" {
+            let _ = stop_running_timers(&conn, Some(id));
+            conn.execute(
+                "UPDATE tasks SET status = 'done', completed_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?1",
+                params![id],
+            ).map_err(|e| e.to_string())?;
+        } else {
+            conn.execute(
+                "UPDATE tasks SET status = 'todo', completed_at = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?1",
+                params![id],
+            ).map_err(|e| e.to_string())?;
+        }
+
+        get_task_by_id(&conn, id)?
+    };
+
+    let _ = app.emit("task-updated", &task);
+    let _ = app.emit("tasks-changed", ());
+    if task.status == "done" {
+        let _ = app.emit("timer-stopped", Some(id));
     }
-
-    get_task_by_id(&conn, id)
+    Ok(task)
 }
 
 #[tauri::command]
@@ -3389,6 +3418,7 @@ async fn start_task_timer(
 
     let _ = show_timer_widget(app.clone()).await;
     let _ = app.emit("timer-started", &info);
+    let _ = app.emit("tasks-changed", ());
 
     Ok(info)
 }
@@ -3406,6 +3436,7 @@ async fn stop_task_timer(
         stop_running_timers(&conn, task_id)?;
     }
     let _ = app.emit("timer-stopped", task_id);
+    let _ = app.emit("tasks-changed", ());
     Ok(())
 }
 
@@ -3517,6 +3548,25 @@ async fn get_timer_status(
         }
     };
 
+    let last_active_task: Option<PausedTaskInfo> = {
+        let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+        let q = "SELECT t.id, t.title FROM tasks t
+                 WHERE t.status != 'done'
+                 ORDER BY CASE WHEN t.status = 'in_progress' THEN 0 ELSE 1 END,
+                          t.updated_at DESC
+                 LIMIT 1";
+        let mut stmt = conn.prepare(q).map_err(|e| e.to_string())?;
+        let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+        if let Some(r) = rows.next().map_err(|e| e.to_string())? {
+            Some(PausedTaskInfo {
+                task_id: r.get(0).map_err(|e| e.to_string())?,
+                title: r.get(1).map_err(|e| e.to_string())?,
+            })
+        } else {
+            None
+        }
+    };
+
     let is_running = active_timer.is_some();
     let is_auto_paused = auto_paused.is_some();
     let auto_paused_task = auto_paused.map(|(id, title)| PausedTaskInfo { task_id: id, title });
@@ -3526,6 +3576,7 @@ async fn get_timer_status(
         is_auto_paused,
         active_timer,
         auto_paused_task,
+        last_active_task,
     })
 }
 

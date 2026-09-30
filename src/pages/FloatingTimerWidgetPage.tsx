@@ -45,6 +45,9 @@ export default function FloatingTimerWidgetPage() {
       } else if (s.autoPausedTask) {
         setLastTaskId(s.autoPausedTask.taskId);
         setLastTaskTitle(s.autoPausedTask.title);
+      } else if (s.lastActiveTask) {
+        setLastTaskId(s.lastActiveTask.taskId);
+        setLastTaskTitle(s.lastActiveTask.title);
       }
     } catch (err) {
       console.error("Failed to sync timer status:", err);
@@ -61,6 +64,8 @@ export default function FloatingTimerWidgetPage() {
     listen("timer-stopped", () => syncStatus()).then((u) => unlistens.push(u));
     listen("timer-auto-paused", () => syncStatus()).then((u) => unlistens.push(u));
     listen("timer-auto-resumed", () => syncStatus()).then((u) => unlistens.push(u));
+    listen("tasks-changed", () => syncStatus()).then((u) => unlistens.push(u));
+    listen("task-updated", () => syncStatus()).then((u) => unlistens.push(u));
 
     // Periodic safety sync every 3 seconds
     const pollInterval = window.setInterval(syncStatus, 3000);
@@ -95,7 +100,11 @@ export default function FloatingTimerWidgetPage() {
   // Double click anywhere on widget opens Manager and navigates to this task
   const handleDoubleClick = async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
-    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
+    const tid =
+      status.activeTimer?.taskId ||
+      status.autoPausedTask?.taskId ||
+      status.lastActiveTask?.taskId ||
+      lastTaskId;
     try {
       if (tid) {
         localStorage.setItem("pascopyof_target_task_id", String(tid));
@@ -121,7 +130,11 @@ export default function FloatingTimerWidgetPage() {
       syncStatus();
     } else {
       // Start or Resume
-      const tid = status.autoPausedTask?.taskId || lastTaskId || status.activeTimer?.taskId;
+      const tid =
+        status.autoPausedTask?.taskId ||
+        status.activeTimer?.taskId ||
+        status.lastActiveTask?.taskId ||
+        lastTaskId;
       if (tid) {
         await startTaskTimer(tid);
         syncStatus();
@@ -143,9 +156,33 @@ export default function FloatingTimerWidgetPage() {
   // Mark current task done and close widget
   const handleMarkDone = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
+    const tid =
+      status.activeTimer?.taskId ||
+      status.autoPausedTask?.taskId ||
+      status.lastActiveTask?.taskId ||
+      lastTaskId;
     if (tid) {
-      await toggleTaskStatus(tid);
+      try {
+        await toggleTaskStatus(tid);
+        await emit("task-updated", { id: tid });
+        await emit("tasks-changed", { id: tid });
+        await emit("timer-stopped", tid);
+      } catch (err) {
+        console.error("Failed to toggle task status from widget:", err);
+      }
+      setStatus((prev) => ({
+        ...prev,
+        isRunning: false,
+        isAutoPaused: false,
+        activeTimer: null,
+        autoPausedTask: null,
+        lastActiveTask: null,
+      }));
+      setLastTaskId(null);
+      setLastTaskTitle("");
+      setSecondsTick(0);
+      await hideTimerWidget();
+    } else {
       await hideTimerWidget();
     }
   };
@@ -153,7 +190,11 @@ export default function FloatingTimerWidgetPage() {
   // Open Manager
   const handleOpenManager = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const tid = status.activeTimer?.taskId || status.autoPausedTask?.taskId || lastTaskId;
+    const tid =
+      status.activeTimer?.taskId ||
+      status.autoPausedTask?.taskId ||
+      status.lastActiveTask?.taskId ||
+      lastTaskId;
     try {
       if (tid) {
         localStorage.setItem("pascopyof_target_task_id", String(tid));
@@ -179,10 +220,16 @@ export default function FloatingTimerWidgetPage() {
   const currentTitle =
     status.activeTimer?.taskTitle ||
     status.autoPausedTask?.title ||
+    status.lastActiveTask?.title ||
     lastTaskTitle ||
     "PasCopyOf Focus";
 
-  const hasTask = Boolean(status.activeTimer || status.autoPausedTask || lastTaskId);
+  const hasTask = Boolean(
+    status.activeTimer ||
+    status.autoPausedTask ||
+    status.lastActiveTask ||
+    lastTaskId
+  );
 
   return (
     <div

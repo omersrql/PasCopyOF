@@ -188,6 +188,14 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
 
     listen("timer-started", () => loadData()).then((u) => unlistens.push(u));
     listen("timer-stopped", () => loadData()).then((u) => unlistens.push(u));
+    listen("tasks-changed", () => loadData()).then((u) => unlistens.push(u));
+    listen("task-updated", (event: any) => {
+      loadData();
+      if (event.payload?.id && event.payload.id === selectedTaskId) {
+        getTaskChecklists(event.payload.id).then(setChecklists).catch(console.error);
+        getTaskWorklogs(event.payload.id).then(setWorklogs).catch(console.error);
+      }
+    }).then((u) => unlistens.push(u));
     listen("open-task-in-manager", (event: any) => {
       if (event.payload?.taskId) {
         selectAndOpenTask(Number(event.payload.taskId));
@@ -199,7 +207,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
     return () => {
       unlistens.forEach((u) => u());
     };
-  }, [loadData, lang, showToast, selectAndOpenTask]);
+  }, [loadData, lang, showToast, selectAndOpenTask, selectedTaskId]);
 
   // If a task is selected, load its checklist and worklogs
   useEffect(() => {

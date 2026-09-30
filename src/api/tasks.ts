@@ -56,6 +56,7 @@ export interface TimerStatusInfo {
   isAutoPaused: boolean;
   activeTimer: ActiveTimerInfo | null;
   autoPausedTask: { taskId: number; title: string } | null;
+  lastActiveTask?: { taskId: number; title: string } | null;
 }
 
 export async function showTimerWidget(): Promise<void> {
