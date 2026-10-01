@@ -122,8 +122,8 @@ export default function FloatingTimerWidgetPage() {
   };
 
   // Toggle play/pause/resume
-  const handleTogglePlay = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleTogglePlay = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (status.isRunning && status.activeTimer) {
       // Pause
       await stopTaskTimer(status.activeTimer.taskId);
@@ -142,20 +142,9 @@ export default function FloatingTimerWidgetPage() {
     }
   };
 
-  // ESC key to hide widget
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        hideTimerWidget();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
   // Mark current task done and close widget
-  const handleMarkDone = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleMarkDone = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const tid =
       status.activeTimer?.taskId ||
       status.autoPausedTask?.taskId ||
@@ -186,6 +175,27 @@ export default function FloatingTimerWidgetPage() {
       await hideTimerWidget();
     }
   };
+
+  // Keyboard shortcuts:
+  // Space / P: Play / Pause timer
+  // Enter / D: Finish & Complete task (Sonlandır)
+  // Esc: Hide widget
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        hideTimerWidget();
+      } else if (e.key === " " || e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        handleTogglePlay();
+      } else if (e.key === "Enter" || e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        handleMarkDone();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [status, lastTaskId]);
 
   // Open Manager
   const handleOpenManager = async (e: React.MouseEvent) => {
@@ -295,7 +305,7 @@ export default function FloatingTimerWidgetPage() {
               type="button"
               className="widget-btn btn-play"
               onClick={handleTogglePlay}
-              title={status.isRunning ? "Sayacı Duraklat" : "Sayacı Başlat / Devam Et"}
+              title={status.isRunning ? "Sayacı Duraklat (Kısayol: Boşluk veya P)" : "Sayacı Başlat / Devam Et (Kısayol: Boşluk veya P)"}
             >
               {status.isRunning ? "⏸️" : "▶️"}
             </button>
@@ -306,7 +316,7 @@ export default function FloatingTimerWidgetPage() {
               type="button"
               className="widget-btn btn-done"
               onClick={handleMarkDone}
-              title="Görevi Tamamla"
+              title="Görevi Sonlandır / Tamamla (Kısayol: Enter veya D)"
             >
               ✓
             </button>
@@ -325,7 +335,7 @@ export default function FloatingTimerWidgetPage() {
             type="button"
             className="widget-btn btn-close"
             onClick={handleClose}
-            title="Widget'ı Gizle"
+            title="Widget'ı Gizle (Kısayol: Esc)"
           >
             ✕
           </button>

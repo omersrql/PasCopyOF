@@ -209,3 +209,12 @@ export async function deleteTaskChecklist(id: number): Promise<void> {
 export async function getDailySummary(dateStr?: string): Promise<DailySummary> {
   return await invoke<DailySummary>("get_daily_summary", { dateStr: dateStr ?? null });
 }
+
+export async function completeActiveTask(): Promise<TaskItem | null> {
+  return await invoke<TaskItem | null>("complete_active_task");
+}
+
+export async function toggleActiveTaskTimer(): Promise<ActiveTimerInfo | null> {
+  return await invoke<ActiveTimerInfo | null>("toggle_active_task_timer");
+}
+

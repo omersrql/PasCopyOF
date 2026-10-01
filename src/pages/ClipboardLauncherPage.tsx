@@ -421,12 +421,30 @@ export default function ClipboardLauncherPage() {
         return;
       }
 
+      const getGridColumnCount = (): number => {
+        if (!listRef.current || listRef.current.children.length <= 1) return 1;
+        const children = listRef.current.children;
+        const firstTop = (children[0] as HTMLElement).offsetTop;
+        let cols = 0;
+        for (let i = 0; i < children.length; i++) {
+          const el = children[i] as HTMLElement;
+          if (Math.abs(el.offsetTop - firstTop) < 6) {
+            cols++;
+          } else {
+            break;
+          }
+        }
+        return Math.max(1, cols);
+      };
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+        const cols = getGridColumnCount();
+        setSelectedIndex((prev) => Math.min(items.length - 1, prev + cols));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(0, prev - 1));
+        const cols = getGridColumnCount();
+        setSelectedIndex((prev) => Math.max(0, prev - cols));
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));

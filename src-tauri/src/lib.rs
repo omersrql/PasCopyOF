@@ -332,6 +332,22 @@ fn init_db_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_clipboard_pinned_copied ON clipboard_history (is_pinned DESC, copied_at DESC);
         CREATE INDEX IF NOT EXISTS idx_clipboard_type_pinned ON clipboard_history (content_type, is_pinned DESC, copied_at DESC);
 
+        -- Clean up duplicate historical text entries keeping the newest one
+        DELETE FROM clipboard_history
+        WHERE content_type = 'text'
+          AND text_content IS NOT NULL
+          AND id NOT IN (
+              SELECT MAX(id) FROM clipboard_history WHERE content_type = 'text' GROUP BY text_content
+          );
+
+        -- Clean up duplicate historical file entries keeping the newest one
+        DELETE FROM clipboard_history
+        WHERE content_type = 'files'
+          AND file_paths IS NOT NULL
+          AND id NOT IN (
+              SELECT MAX(id) FROM clipboard_history WHERE content_type = 'files' GROUP BY file_paths
+          );
+
         CREATE TABLE IF NOT EXISTS tasks (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             title            TEXT    NOT NULL,
@@ -738,15 +754,20 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
         let monitor = get_monitor_for_cursor(app, cursor);
 
         if window_mode == "fullscreen" {
+            let _ = window.unmaximize();
             if let Some(ref m) = monitor {
                 let m_pos = m.position();
                 let m_size = m.size();
                 let _ = window.set_position(tauri::Position::Physical(*m_pos));
                 let _ = window.set_size(tauri::Size::Physical(*m_size));
+                let _ = window.show();
+                // Re-apply position and size after show to ensure Windows DWM uses correct monitor DPI mapping
+                let _ = window.set_position(tauri::Position::Physical(*m_pos));
+                let _ = window.set_size(tauri::Size::Physical(*m_size));
             } else {
+                let _ = window.show();
                 let _ = window.maximize();
             }
-            let _ = window.show();
             let _ = window.set_focus();
         } else {
             let _ = window.unmaximize();
@@ -756,25 +777,26 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
                 state.0.lock().map(|st| st.panel_scale.clone()).unwrap_or_else(|_| "medium".to_string())
             };
             let scale_mult: f64 = match panel_scale.as_str() {
-                "small" => 0.85,
-                "large" => 1.18,
+                "small" => 0.88,
+                "large" => 1.15,
                 _ => 1.0,
             };
 
             // Adaptively size the popup window based on the monitor resolution and panel_scale
+            // Ensure width is wide enough to house both main panel and detail preview popover without clipping
             let (window_width, window_height) = if let Some(ref m) = monitor {
                 let m_size = m.size();
                 let scale = m.scale_factor();
                 let m_log_w = m_size.width as f64 / scale;
                 let m_log_h = m_size.height as f64 / scale;
 
-                let base_w = (m_log_w * 0.50).clamp(780.0, 1020.0);
-                let base_h = (m_log_h * 0.52).clamp(440.0, 640.0);
-                let w = (base_w * scale_mult).clamp(640.0, m_log_w * 0.95);
-                let h = (base_h * scale_mult).clamp(380.0, m_log_h * 0.95);
+                let base_w = (m_log_w * 0.58).clamp(920.0, 1150.0);
+                let base_h = (m_log_h * 0.56).clamp(480.0, 700.0);
+                let w = (base_w * scale_mult).clamp(800.0, m_log_w * 0.96);
+                let h = (base_h * scale_mult).clamp(420.0, m_log_h * 0.96);
                 (w, h)
             } else {
-                ((900.0 * scale_mult).clamp(640.0, 1200.0), (500.0 * scale_mult).clamp(380.0, 800.0))
+                ((960.0 * scale_mult).clamp(800.0, 1200.0), (520.0 * scale_mult).clamp(420.0, 800.0))
             };
 
             let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
@@ -1172,16 +1194,16 @@ impl ClipboardHandler for AppClipboardHandler {
                     };
                     let json_paths = serde_json::to_string(&files).unwrap_or_default();
 
-                    let most_recent: Option<String> = conn.query_row(
-                        "SELECT file_paths FROM clipboard_history WHERE content_type = 'files' ORDER BY copied_at DESC LIMIT 1",
-                        [],
+                    let existing_id: Option<i64> = conn.query_row(
+                        "SELECT id FROM clipboard_history WHERE content_type = 'files' AND file_paths = ?1 LIMIT 1",
+                        params![json_paths],
                         |r| r.get(0),
                     ).ok();
 
-                    if most_recent.as_deref() == Some(&json_paths) {
+                    if let Some(id) = existing_id {
                         let _ = conn.execute(
-                            "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = (SELECT id FROM clipboard_history WHERE content_type = 'files' ORDER BY copied_at DESC LIMIT 1)",
-                            [],
+                            "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = ?1",
+                            params![id],
                         );
                     } else {
                         let _ = conn.execute(
@@ -1209,12 +1231,42 @@ impl ClipboardHandler for AppClipboardHandler {
                     if let Ok(conn) = open_db(&self.db_path) {
                         let dimensions = format!("{} × {}", w, h);
                         let preview = format!("Görsel ({} × {})", w, h);
-                        let _ = conn.execute(
-                            "INSERT INTO clipboard_history (content_type, image_path, preview, image_dimensions, copied_at) VALUES ('image', ?1, ?2, ?3, datetime('now'))",
-                            params![path_str, preview, dimensions],
-                        );
-                        prune_clipboard_history(&conn, max_items);
-                        let _ = self.app_handle.emit("clipboard-updated", ());
+
+                        // Check if an image with same dimensions and bytes already exists in recent items
+                        let existing_img: Option<(i64, String)> = conn.query_row(
+                            "SELECT id, image_path FROM clipboard_history WHERE content_type = 'image' AND image_dimensions = ?1 ORDER BY copied_at DESC LIMIT 1",
+                            params![dimensions],
+                            |r| Ok((r.get(0)?, r.get(1)?)),
+                        ).ok();
+
+                        let is_dup = if let Some((old_id, ref old_path)) = existing_img {
+                            if let (Ok(new_b), Ok(old_b)) = (std::fs::read(&path_str), std::fs::read(old_path)) {
+                                if new_b == old_b {
+                                    let _ = std::fs::remove_file(&path_str);
+                                    let _ = conn.execute(
+                                        "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = ?1",
+                                        params![old_id],
+                                    );
+                                    let _ = self.app_handle.emit("clipboard-updated", ());
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+
+                        if !is_dup {
+                            let _ = conn.execute(
+                                "INSERT INTO clipboard_history (content_type, image_path, preview, image_dimensions, copied_at) VALUES ('image', ?1, ?2, ?3, datetime('now'))",
+                                params![path_str, preview, dimensions],
+                            );
+                            prune_clipboard_history(&conn, max_items);
+                            let _ = self.app_handle.emit("clipboard-updated", ());
+                        }
                         return;
                     }
                 }
@@ -1240,16 +1292,16 @@ impl ClipboardHandler for AppClipboardHandler {
             let preview = if preview.is_empty() { "Metin".to_string() } else { preview };
 
             if let Ok(conn) = open_db(&self.db_path) {
-                let most_recent: Option<String> = conn.query_row(
-                    "SELECT text_content FROM clipboard_history WHERE content_type = 'text' ORDER BY copied_at DESC LIMIT 1",
-                    [],
+                let existing_id: Option<i64> = conn.query_row(
+                    "SELECT id FROM clipboard_history WHERE content_type = 'text' AND text_content = ?1 LIMIT 1",
+                    params![text],
                     |r| r.get(0),
                 ).ok();
 
-                if most_recent.as_deref() == Some(&text) {
+                if let Some(id) = existing_id {
                     let _ = conn.execute(
-                        "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = (SELECT id FROM clipboard_history WHERE content_type = 'text' ORDER BY copied_at DESC LIMIT 1)",
-                        [],
+                        "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = ?1",
+                        params![id],
                     );
                 } else {
                     let _ = conn.execute(
@@ -2940,17 +2992,20 @@ async fn update_clipboard_settings(
             let monitor = get_monitor_for_cursor(&app, cursor);
 
             if mode == "fullscreen" {
+                let _ = window.unmaximize();
                 if let Some(ref m) = monitor {
                     let m_pos = m.position();
                     let m_size = m.size();
                     let _ = window.set_position(tauri::Position::Physical(*m_pos));
                     let _ = window.set_size(tauri::Size::Physical(*m_size));
+                } else {
+                    let _ = window.maximize();
                 }
             } else {
                 let _ = window.unmaximize();
                 let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-                    width: 900.0,
-                    height: 500.0,
+                    width: 960.0,
+                    height: 540.0,
                 }));
             }
         }
@@ -3908,6 +3963,130 @@ async fn toggle_timer_widget(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn complete_active_task(
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<Option<TaskItem>, String> {
+    let task_opt = {
+        let mut st = state.0.lock().map_err(|e| e.to_string())?;
+        let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+        // 1. Check running timer worklog
+        let running_id: Option<i64> = conn.query_row(
+            "SELECT task_id FROM task_worklogs WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        ).ok();
+
+        let target_id = running_id
+            .or_else(|| st.active_timer_auto_paused.as_ref().map(|(tid, _)| *tid))
+            .or_else(|| {
+                conn.query_row(
+                    "SELECT id FROM tasks WHERE status != 'done' ORDER BY CASE status WHEN 'in_progress' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                ).ok()
+            });
+
+        if let Some(tid) = target_id {
+            st.active_timer_auto_paused = None;
+            let _ = stop_running_timers(&conn, Some(tid));
+            conn.execute(
+                "UPDATE tasks SET status = 'done', completed_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?1",
+                params![tid],
+            ).map_err(|e| e.to_string())?;
+            Some(get_task_by_id(&conn, tid)?)
+        } else {
+            None
+        }
+    };
+
+    if let Some(ref task) = task_opt {
+        let _ = app.emit("task-updated", task);
+        let _ = app.emit("tasks-changed", ());
+        let _ = app.emit("timer-stopped", task.id);
+        if let Some(w) = app.get_webview_window("timer-widget") {
+            let _ = w.hide();
+        }
+    }
+
+    Ok(task_opt)
+}
+
+#[tauri::command]
+async fn toggle_active_task_timer(
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<Option<ActiveTimerInfo>, String> {
+    let result = {
+        let mut st = state.0.lock().map_err(|e| e.to_string())?;
+        let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+        let running_id: Option<i64> = conn.query_row(
+            "SELECT task_id FROM task_worklogs WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        ).ok();
+
+        if let Some(tid) = running_id {
+            // Stop / Pause
+            st.active_timer_auto_paused = None;
+            let _ = stop_running_timers(&conn, Some(tid));
+            None
+        } else {
+            // Resume / Start
+            let target_id = st.active_timer_auto_paused.as_ref().map(|(tid, _)| *tid)
+                .or_else(|| {
+                    conn.query_row(
+                        "SELECT id FROM tasks WHERE status != 'done' ORDER BY CASE status WHEN 'in_progress' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
+                        [],
+                        |r| r.get(0),
+                    ).ok()
+                });
+
+            if let Some(tid) = target_id {
+                st.active_timer_auto_paused = None;
+                let _ = conn.execute(
+                    "UPDATE tasks SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?1",
+                    params![tid],
+                );
+                let _ = conn.execute(
+                    "INSERT INTO task_worklogs (task_id, start_time) VALUES (?1, datetime('now', 'localtime'))",
+                    params![tid],
+                );
+                let wid = conn.last_insert_rowid();
+                let title = get_task_by_id(&conn, tid).map(|t| t.title).unwrap_or_default();
+                let stime: String = conn.query_row(
+                    "SELECT start_time FROM task_worklogs WHERE id = ?1",
+                    params![wid],
+                    |row| row.get(0),
+                ).unwrap_or_default();
+
+                Some(ActiveTimerInfo {
+                    worklog_id: wid,
+                    task_id: tid,
+                    task_title: title,
+                    start_time: stime,
+                    elapsed_seconds: 0,
+                })
+            } else {
+                None
+            }
+        }
+    };
+
+    if let Some(ref info) = result {
+        let _ = show_timer_widget(app.clone()).await;
+        let _ = app.emit("timer-started", info);
+    } else {
+        let _ = app.emit("timer-stopped", serde_json::Value::Null);
+    }
+    let _ = app.emit("tasks-changed", ());
+
+    Ok(result)
+}
+
+#[tauri::command]
 async fn get_timer_widget_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
     let st = state.0.lock().map_err(|e| e.to_string())?;
     Ok(st.timer_widget_shortcut.clone())
@@ -4834,6 +5013,8 @@ pub fn run() {
             toggle_timer_widget,
             get_timer_widget_shortcut,
             set_timer_widget_shortcut,
+            complete_active_task,
+            toggle_active_task_timer,
             get_timer_status,
             open_tasks_window,
             get_tasks_shortcut,
