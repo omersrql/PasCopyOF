@@ -434,6 +434,33 @@ export const translations = {
     clipEmptyContent: "(Boş içerik)",
     clipCharsLabel: "karakter",
     clipFilesLabel: "dosya",
+
+    // Update Prompt Modal & Auto-Check
+    updatePromptTitle: "Yeni Sürüm Yayınlandı!",
+    updatePromptBadge: "Güncelleme Hazır",
+    updatePromptCurrentVersion: "Mevcut Sürüm",
+    updatePromptNewVersion: "Yeni Sürüm",
+    updatePromptReleaseNotes: "Sürüm Notları & Yenilikler",
+    updatePromptQuestion: "PasCopyOf için yeni bir güncelleme yayınlandı. Şimdi indirip güncellemek istiyor musunuz?",
+    updatePromptUpdateBtn: "🚀 Şimdi Güncelle",
+    updatePromptLaterBtn: "Daha Sonra",
+    updatePromptDownloading: "Güncelleme indiriliyor ve kuruluyor... %{percent}",
+    updatePromptInstallingNote: "Lütfen bekleyin, güncelleme dosyaları güvenli şekilde indirilip kuruluyor...",
+    updatePromptSuccessTitle: "🎉 Güncelleme Başarıyla Yüklendi!",
+    updatePromptSuccessDesc: "Yeni özelliklerin devreye girmesi için uygulama yeniden başlatılıyor...",
+    updatePromptRestartBtn: "Yeniden Başlat",
+    updatePromptErrorTitle: "Güncelleme Sırasında Hata Oluştu",
+    updatePromptRetryBtn: "Tekrar Dene",
+    settingsAutoCheckUpdatesTitle: "Açılışta Güncellemeleri Otomatik Denetle",
+    settingsAutoCheckUpdatesHint: "Uygulama her açıldığında yeni bir sürüm olup olmadığını arka planda kontrol eder ve sizi bilgilendirir.",
+
+    // Launcher UI
+    launcherHintNavigate: "Gezin",
+    launcherHintPassword: "Parola",
+    launcherHintUsername: "Kullanıcı Adı",
+    launcherHintClose: "Kapat",
+    launcherLockTitle: "Kasayı Kilitle",
+    launcherManagerTitle: "Kasa Yöneticisini Aç",
   },
 
   en: {
@@ -867,6 +894,33 @@ export const translations = {
     clipEmptyContent: "(Empty content)",
     clipCharsLabel: "chars",
     clipFilesLabel: "files",
+
+    // Update Prompt Modal & Auto-Check
+    updatePromptTitle: "New Version Available!",
+    updatePromptBadge: "Update Ready",
+    updatePromptCurrentVersion: "Current Version",
+    updatePromptNewVersion: "New Version",
+    updatePromptReleaseNotes: "Release Notes & Changes",
+    updatePromptQuestion: "A new update for PasCopyOf is available. Would you like to download and install it now?",
+    updatePromptUpdateBtn: "🚀 Update Now",
+    updatePromptLaterBtn: "Remind Later",
+    updatePromptDownloading: "Downloading and installing update... %{percent}",
+    updatePromptInstallingNote: "Please wait, the update package is being securely downloaded and installed...",
+    updatePromptSuccessTitle: "🎉 Update Successfully Installed!",
+    updatePromptSuccessDesc: "The application is restarting now to apply the new features and improvements...",
+    updatePromptRestartBtn: "Restart Now",
+    updatePromptErrorTitle: "Update Failed",
+    updatePromptRetryBtn: "Retry",
+    settingsAutoCheckUpdatesTitle: "Automatically Check for Updates on Startup",
+    settingsAutoCheckUpdatesHint: "Silently checks for new versions whenever the app launches and notifies you if an update is available.",
+
+    // Launcher UI
+    launcherHintNavigate: "Navigate",
+    launcherHintPassword: "Password",
+    launcherHintUsername: "Username",
+    launcherHintClose: "Close",
+    launcherLockTitle: "Lock Vault",
+    launcherManagerTitle: "Open Vault Manager",
   },
 } as const;
 

@@ -3,6 +3,7 @@
  */
 import { check, Update, DownloadEvent } from "@tauri-apps/plugin-updater";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 
 export interface UpdateInfo {
   available: boolean;
@@ -64,3 +65,8 @@ export async function downloadAndInstallUpdate(
     }
   });
 }
+
+export async function restartApp(): Promise<void> {
+  return invoke<void>("restart_app");
+}
+

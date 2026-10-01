@@ -23,11 +23,14 @@ import type { CredentialSafe, Category } from "../api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "../context/AppContext";
+import { UpdatePromptModal } from "../components/UpdatePromptModal";
+import { useAutoUpdateChecker } from "../hooks/useAutoUpdateChecker";
 
 const SEARCH_DEBOUNCE = 80;
 
 export default function LauncherPage() {
   const { t } = useApp();
+  const { updateInfo, showPrompt, dismissPrompt } = useAutoUpdateChecker();
   const [unlocked, setUnlocked] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CredentialSafe[]>([]);
@@ -458,27 +461,27 @@ export default function LauncherPage() {
           <div className="launcher-footer">
             <div className="footer-hints">
               <div className="footer-hint">
-                <span className="kbd">↑↓</span> Navigate
+                <span className="kbd">↑↓</span> {t("launcherHintNavigate")}
               </div>
               <div className="footer-hint">
-                <span className="kbd">↵</span> Password
+                <span className="kbd">↵</span> {t("launcherHintPassword")}
               </div>
               <div className="footer-hint">
-                <span className="kbd">Ctrl+↵</span> Username
+                <span className="kbd">Ctrl+↵</span> {t("launcherHintUsername")}
               </div>
               <div className="footer-hint">
-                <span className="kbd">Esc</span> Close
+                <span className="kbd">Esc</span> {t("launcherHintClose")}
               </div>
             </div>
 
             <div className="footer-actions">
-              <button id="launcher-lock-btn" className="btn btn-icon" title="Lock vault" onClick={handleLock}>
+              <button id="launcher-lock-btn" className="btn btn-icon" title={t("launcherLockTitle")} onClick={handleLock}>
                 🔒
               </button>
               <button
                 id="launcher-manager-btn"
                 className="btn btn-icon"
-                title="Open Vault Manager"
+                title={t("launcherManagerTitle")}
                 onClick={handleOpenManager}
               >
                 ⚙️
@@ -489,6 +492,12 @@ export default function LauncherPage() {
       )}
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      <UpdatePromptModal
+        isOpen={showPrompt}
+        updateInfo={updateInfo}
+        onClose={dismissPrompt}
+      />
     </div>
   );
 }

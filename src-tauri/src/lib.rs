@@ -2134,6 +2134,11 @@ async fn open_manager(app: AppHandle, task_id: Option<i64>) -> Result<(), String
     Ok(())
 }
 
+#[tauri::command]
+fn restart_app(app: AppHandle) {
+    app.restart();
+}
+
 // ─── Shortcut settings ───────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -4839,6 +4844,7 @@ pub fn run() {
             get_quick_task_shortcut,
             set_quick_task_shortcut,
             save_recovery_key_file,
+            restart_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

@@ -66,8 +66,10 @@ import {
 } from "../api/tasks";
 import { useApp } from "../context/AppContext";
 import type { AppTheme, AppLanguage } from "../api/config";
-import { checkAppUpdate, downloadAndInstallUpdate, getAppVersion } from "../api/updater";
+import { checkAppUpdate, downloadAndInstallUpdate, getAppVersion, restartApp } from "../api/updater";
 import type { UpdateInfo } from "../api/updater";
+import { UpdatePromptModal } from "../components/UpdatePromptModal";
+import { useAutoUpdateChecker } from "../hooks/useAutoUpdateChecker";
 
 type EditorMode = "idle" | "new" | "edit";
 
@@ -173,6 +175,17 @@ export default function ManagerPage() {
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
+  // Auto update prompt on startup
+  const {
+    updateInfo: startupUpdateInfo,
+    showPrompt: showStartupPrompt,
+    dismissPrompt: dismissStartupPrompt,
+  } = useAutoUpdateChecker();
+
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(() => {
+    return localStorage.getItem("pascopyof_auto_check_updates") !== "false";
+  });
+
   const [idleTimeout, setIdleTimeoutState] = useState(15);
   const [clipboardClearSeconds, setClipboardClearSecondsState] = useState(15);
   const [autostartOn, setAutostartOn] = useState(false);
@@ -235,10 +248,17 @@ export default function ManagerPage() {
       });
       showToast(
         lang === "tr"
-          ? "Güncelleme yüklendi. Uygulama yeniden başlatılıyor..."
-          : "Update installed. Restarting...",
+          ? "✓ Güncelleme yüklendi. Uygulama yeniden başlatılıyor..."
+          : "✓ Update installed. Restarting...",
         "success"
       );
+      setTimeout(async () => {
+        try {
+          await restartApp();
+        } catch (err) {
+          console.error("Restart failed:", err);
+        }
+      }, 1500);
     } catch (err: any) {
       const msg = err?.message || String(err);
       setUpdateError(msg);
@@ -2435,6 +2455,33 @@ export default function ManagerPage() {
                           )}
                         </div>
 
+                        {/* Auto-check Updates Toggle Card */}
+                        <div className="settings-card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <div className="settings-card-title" style={{ margin: 0 }}>
+                                <span>🔄</span>
+                                <span>{t("settingsAutoCheckUpdatesTitle")}</span>
+                              </div>
+                              <p className="settings-hint" style={{ margin: "4px 0 0 0" }}>
+                                {t("settingsAutoCheckUpdatesHint")}
+                              </p>
+                            </div>
+                            <label className="switch">
+                              <input
+                                type="checkbox"
+                                checked={autoCheckUpdates}
+                                onChange={(e) => {
+                                  const val = e.target.checked;
+                                  setAutoCheckUpdates(val);
+                                  localStorage.setItem("pascopyof_auto_check_updates", String(val));
+                                }}
+                              />
+                              <span className="slider round"></span>
+                            </label>
+                          </div>
+                        </div>
+
                         {/* Documentation & Help Guide Card */}
                         <div className="settings-card">
                           <div className="settings-card-title">
@@ -2547,6 +2594,11 @@ export default function ManagerPage() {
           )}
       <UserGuideModal isOpen={showUserGuide} onClose={() => setShowUserGuide(false)} />
       <ReleaseNotesModal isOpen={showReleaseNotes} onClose={() => setShowReleaseNotes(false)} />
+      <UpdatePromptModal
+        isOpen={showStartupPrompt}
+        updateInfo={startupUpdateInfo}
+        onClose={dismissStartupPrompt}
+      />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
