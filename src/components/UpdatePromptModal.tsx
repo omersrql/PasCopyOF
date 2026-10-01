@@ -32,12 +32,14 @@ export function UpdatePromptModal({ isOpen, updateInfo, onClose }: Props) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !downloading) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         handleDismiss();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [isOpen, downloading]);
 
   if (!isOpen || !updateInfo || !updateInfo.available) {

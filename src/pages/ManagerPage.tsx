@@ -574,26 +574,36 @@ export default function ManagerPage() {
 
         if (showReleaseNotes) {
           e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           setShowReleaseNotes(false);
           return;
         }
         if (showUserGuide) {
           e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           setShowUserGuide(false);
           return;
         }
         if (showDeleteConfirm) {
           e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           setShowDeleteConfirm(false);
           return;
         }
         if (showCategoryManager) {
           e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           setShowCategoryManager(false);
           return;
         }
         if (showChangePassword) {
           e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           setShowChangePassword(false);
           return;
         }
@@ -654,18 +664,6 @@ export default function ManagerPage() {
       panelScale,
     ]
   );
-
-  useEffect(() => {
-    if (!showChangePassword || recordingShortcut || recordingClipboardShortcut || recordingScreenshotShortcut || recordingTimerWidgetShortcut || recordingTasksShortcut || recordingQuickTaskShortcut) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setShowChangePassword(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showChangePassword, recordingShortcut, recordingClipboardShortcut, recordingScreenshotShortcut, recordingTimerWidgetShortcut, recordingTasksShortcut, recordingQuickTaskShortcut]);
 
   const loadCategories = async () => {
     try {
