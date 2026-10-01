@@ -47,12 +47,12 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
 
   const releases: ReleaseItem[] = [
     {
-      version: "v0.2.2",
+      version: "v0.3.0",
       date: isTr ? "1 Ekim 2026" : "October 1, 2026",
       isLatest: true,
       tagline: {
-        tr: "🛡️ Acil Durum Kurtarma Anahtarı, Hızlı Görevler ve Yenilenen Ayarlar",
-        en: "🛡️ Emergency Recovery Key, Quick Task Creator & Redesigned Settings",
+        tr: "🛡️ Acil Durum Kurtarma, Görev Sayacı, Canlı Otomatik Güncelleme ve Dahili Kılavuz",
+        en: "🛡️ Emergency Recovery, Task Tracker, Live Auto-Updater & In-App Guide",
       },
       features: [
         {
@@ -414,7 +414,7 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
         {/* Footer */}
         <div className="modal-footer release-modal-footer">
           <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-            PasCopyOf v0.2.2 • Designed for Power Users & SysAdmins
+            PasCopyOf v0.3.0 • Designed for Power Users & SysAdmins
           </div>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             {isTr ? "Kapat (Esc)" : "Close (Esc)"}

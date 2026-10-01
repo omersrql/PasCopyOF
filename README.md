@@ -142,7 +142,7 @@
   - Built directly into the Manager topbar and Settings.
   - Searchable topics covering Vault Security, Hotkeys, Clipboard Manager, Tasks & Timer, Screenshot & OCR, and FAQ.
 - **✨ In-App Release Notes & Changelog Modal**:
-  - Interactive topbar version badge (`✨ v0.2.2`) opens the complete release history with dates, categories, and feature descriptions.
+  - Interactive topbar version badge (`✨ v0.3.0`) opens the complete release history with dates, categories, and feature descriptions.
 
 ---
 

@@ -438,7 +438,7 @@ export function UserGuideModal({ isOpen, onClose }: Props) {
         {/* Footer */}
         <div className="modal-footer guide-modal-footer">
           <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-            PasCopyOf v0.2.2 • Offline & Secure
+            PasCopyOf v0.3.0 • Offline & Secure
           </div>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             {isTr ? "Kapat (Esc)" : "Close (Esc)"}
