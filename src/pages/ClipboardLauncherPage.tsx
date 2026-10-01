@@ -49,6 +49,7 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
   formatTime,
   saveToVaultHint,
 }: ClipboardItemCardProps) {
+  const { t } = useApp();
   return (
     <div
       className={`clip-item-card ${isSelected ? "selected" : ""} ${
@@ -69,7 +70,7 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
           <div className="clip-img-thumb-wrap">
             <img
               src={item.imageData}
-              alt="Önizleme"
+              alt={t("clipBadgeImage")}
               className="clip-img-thumb"
               loading="lazy"
             />
@@ -108,7 +109,7 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
       {/* Middle Content */}
       <div className="clip-item-body">
         <div className="clip-item-preview">
-          {item.preview || "(Boş içerik)"}
+          {item.preview || t("clipEmptyContent")}
         </div>
         <div className="clip-item-meta">
           <span className="clip-meta-time">
@@ -116,12 +117,12 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
           </span>
           {item.charCount ? (
             <span className="clip-meta-badge">
-              {item.charCount} karakter
+              {item.charCount} {t("clipCharsLabel")}
             </span>
           ) : null}
           {item.fileCount ? (
             <span className="clip-meta-badge">
-              {item.fileCount} dosya
+              {item.fileCount} {t("clipFilesLabel")}
             </span>
           ) : null}
         </div>
@@ -140,14 +141,14 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
         )}
         <button
           className={`clip-action-btn pin ${item.isPinned ? "active" : ""}`}
-          title={item.isPinned ? "Sabitlemeyi Kaldır" : "Sabitle"}
+          title={item.isPinned ? t("clipUnpinTooltip") : t("clipPinTooltip")}
           onClick={(e) => onTogglePin(e, item.id)}
         >
           ★
         </button>
         <button
           className="clip-action-btn delete"
-          title="Sil (Del)"
+          title={t("clipDeleteTooltip")}
           onClick={(e) => onDelete(e, item.id)}
         >
           ✕
@@ -155,7 +156,7 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
       </div>
 
       {isJustCopied && (
-        <div className="clip-copied-toast">Kopyalandı!</div>
+        <div className="clip-copied-toast">{t("copied")}</div>
       )}
     </div>
   );
@@ -622,12 +623,12 @@ export default function ClipboardLauncherPage() {
             <div className="clip-empty-state">
               <div className="clip-empty-icon">📋</div>
               <div className="clip-empty-title">
-                {loading ? "Yükleniyor..." : "Pano kaydı bulunamadı"}
+                {loading ? t("loading") : t("clipEmptyTitle")}
               </div>
               <div className="clip-empty-sub">
                 {query
-                  ? "Arama kriterine uygun öğe yok."
-                  : "Kopyaladığınız metinler, görseller ve dosyalar burada görünür."}
+                  ? t("clipEmptyQuery")
+                  : t("clipEmptyNormal")}
               </div>
             </div>
           ) : (
@@ -654,21 +655,21 @@ export default function ClipboardLauncherPage() {
         {/* Footer / Status bar */}
         <div className="clip-launcher-footer">
           <div className="clip-footer-hints">
-            <span className="clip-kbd">↑↓</span> Gezin
-            <span className="clip-kbd">↵</span> Kopyala
-            <span className="clip-kbd">Ctrl+S</span> Kasaya
-            <span className="clip-kbd">Del</span> Sil
-            <span className="clip-kbd">Esc{closeOnSpace ? " / Space" : ""}</span> Kapat
+            <span className="clip-kbd">↑↓</span> {t("clipHintNavigate")}
+            <span className="clip-kbd">↵</span> {t("clipHintCopy")}
+            <span className="clip-kbd">Ctrl+S</span> {t("clipHintVault")}
+            <span className="clip-kbd">Del</span> {t("clipHintDelete")}
+            <span className="clip-kbd">Esc{closeOnSpace ? " / Space" : ""}</span> {t("clipHintClose")}
           </div>
           <div className="clip-footer-right">
-            <span className="clip-count-label">{items.length} kayıt</span>
+            <span className="clip-count-label">{t("clipRecordsCount").replace("{count}", String(items.length))}</span>
             {items.length > 0 && (
               <button
                 className="clip-footer-clear-btn"
-                title="Sabitlenmemiş geçmişi temizler"
+                title={t("clipClearBtnTooltip")}
                 onClick={handleClearAll}
               >
-                Temizle
+                {t("clipClearBtn")}
               </button>
             )}
           </div>
@@ -682,17 +683,17 @@ export default function ClipboardLauncherPage() {
           <div className="clip-preview-header">
             <div className="clip-preview-title-box">
               {hoverPreviewItem.contentType === "image" ? (
-                <span className="clip-preview-badge image">Görsel</span>
+                <span className="clip-preview-badge image">{t("clipBadgeImage")}</span>
               ) : hoverPreviewItem.contentType === "files" ? (
-                <span className="clip-preview-badge files">Dosya</span>
+                <span className="clip-preview-badge files">{t("clipBadgeFiles")}</span>
               ) : (
-                <span className="clip-preview-badge text">Metin</span>
+                <span className="clip-preview-badge text">{t("clipBadgeText")}</span>
               )}
-              <span className="clip-preview-title">İçerik Detayı</span>
+              <span className="clip-preview-title">{t("clipPreviewDetailsTitle")}</span>
             </div>
             <button
               className="clip-clear-btn"
-              title="Kapat"
+              title={t("close")}
               onClick={() => setHoverPreviewItem(null)}
             >
               ×

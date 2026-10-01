@@ -193,3 +193,26 @@ export async function restoreVault(path: string): Promise<void> {
 export async function importCsv(path: string): Promise<ImportResult> {
   return invoke<ImportResult>("import_csv", { path });
 }
+
+export async function downloadRecoveryKey(key: string): Promise<string | null> {
+  let chosenPath: string | null = null;
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    chosenPath = await save({
+      defaultPath: `pascopyof-recovery-key-${dateStr}.txt`,
+      filters: [{ name: "Metin Dosyası (*.txt)", extensions: ["txt"] }],
+    });
+    if (!chosenPath) {
+      // User cancelled save dialog
+      return null;
+    }
+  } catch (err) {
+    console.warn("Save dialog failed or not available, falling back to default dir:", err);
+  }
+
+  return await invoke<string>("save_recovery_key_file", {
+    path: chosenPath || null,
+    key,
+  });
+}

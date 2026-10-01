@@ -39,6 +39,7 @@ import {
   generateNewRecoveryKey,
   getPasswordHint,
   setPasswordHint,
+  downloadRecoveryKey,
 } from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
 import {
@@ -813,31 +814,30 @@ export default function ManagerPage() {
     return name.slice(0, 2).toLowerCase();
   }
 
-  function downloadRecoveryKeyFile(key: string) {
-    const content = `=====================================================
-PasCopyOf - Acil Durum Kurtarma Anahtari (Emergency Recovery Kit)
-Tarih: ${new Date().toLocaleString()}
-=====================================================
+  const [downloadingRecoveryKey, setDownloadingRecoveryKey] = useState(false);
+  const [downloadedRecoveryKey, setDownloadedRecoveryKey] = useState(false);
 
-Kurtarma Anahtariniz (Recovery Key):
-${key}
-
-ONEMLI GUVENLIK BILGISI:
-Bu anahtar, PasCopyOf kasanizin ana sifresini unuttugunuzda
-verilerinizi kurtarabilmenizi saglayan TEK anahtardir.
-Lutfen bu dosyayi guvenli bir USB bellege, harici diske
-veya parola yoneticinize kaydedin.
-=====================================================`;
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pascopyof-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+  const handleDownloadRecoveryKey = async (key: string) => {
+    if (downloadingRecoveryKey) return;
+    setDownloadingRecoveryKey(true);
+    try {
+      const savedPath = await downloadRecoveryKey(key);
+      if (savedPath) {
+        setDownloadedRecoveryKey(true);
+        showToast(
+          lang === "tr"
+            ? "✓ Kurtarma anahtarı başarıyla kaydedildi"
+            : "✓ Recovery key saved successfully",
+          "success"
+        );
+        setTimeout(() => setDownloadedRecoveryKey(false), 3500);
+      }
+    } catch (err) {
+      showToast(String(err), "error");
+    } finally {
+      setDownloadingRecoveryKey(false);
+    }
+  };
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -2063,7 +2063,7 @@ veya parola yoneticinize kaydedin.
                             <span>{t("settingsTabSecurity")}</span>
                           </div>
                           <div className="settings-pane-desc">
-                            Ana parola yönetimi, pano temizliği ve şifreli kasa yedekleme işlemleri.
+                            {t("settingsSecurityDesc")}
                           </div>
                         </div>
 
@@ -2071,32 +2071,32 @@ veya parola yoneticinize kaydedin.
                         <div className="settings-card">
                           <div className="settings-card-title">
                             <span>🔑</span>
-                            <span>Ana Parola Değiştir (Change Master Password)</span>
+                            <span>{t("settingsChangePasswordTitle")}</span>
                           </div>
                           <form onSubmit={handleChangeMasterPassword} className="editor-form" style={{ gap: 10 }}>
                             <input
                               type="password"
-                              placeholder="Mevcut Ana Parola"
+                              placeholder={t("settingsCurrentPasswordPlaceholder")}
                               className="form-input"
                               value={changePwForm.current}
                               onChange={(e) => setChangePwForm({ ...changePwForm, current: e.target.value })}
                             />
                             <input
                               type="password"
-                              placeholder="Yeni Ana Parola"
+                              placeholder={t("settingsNewPasswordPlaceholder")}
                               className="form-input"
                               value={changePwForm.next}
                               onChange={(e) => setChangePwForm({ ...changePwForm, next: e.target.value })}
                             />
                             <input
                               type="password"
-                              placeholder="Yeni Ana Parolayı Onayla"
+                              placeholder={t("settingsConfirmPasswordPlaceholder")}
                               className="form-input"
                               value={changePwForm.confirm}
                               onChange={(e) => setChangePwForm({ ...changePwForm, confirm: e.target.value })}
                             />
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                              <button type="submit" className="btn btn-primary">Parolayı Güncelle</button>
+                              <button type="submit" className="btn btn-primary">{t("settingsUpdatePasswordBtn")}</button>
                             </div>
                           </form>
                         </div>
@@ -2143,9 +2143,10 @@ veya parola yoneticinize kaydedin.
                                 <button
                                   type="button"
                                   className="btn btn-secondary btn-sm"
-                                  onClick={() => downloadRecoveryKeyFile(activeRecoveryKeyDisplay)}
+                                  onClick={() => handleDownloadRecoveryKey(activeRecoveryKeyDisplay)}
+                                  disabled={downloadingRecoveryKey}
                                 >
-                                  {t("onboardingKeyDownloadBtn")}
+                                  {downloadedRecoveryKey ? t("onboardingKeyDownloaded") : t("onboardingKeyDownloadBtn")}
                                 </button>
                               </div>
                             </div>
@@ -2262,10 +2263,10 @@ veya parola yoneticinize kaydedin.
                         <div className="settings-card">
                           <div className="settings-card-title">
                             <span>💾</span>
-                            <span>Kasa Yedekleme & İçe Aktarma (Backup & Import)</span>
+                            <span>{t("settingsBackupCardTitle")}</span>
                           </div>
                           <p className="settings-hint" style={{ margin: 0 }}>
-                            Yedekleme dosyanız (.pascopyof) tüm parolalarınızı şifreli olarak saklar. Geri yükleme mevcut kasayı değiştirir.
+                            {t("settingsBackupCardDesc")}
                           </p>
                           <div className="settings-actions">
                             <button
@@ -2281,7 +2282,7 @@ veya parola yoneticinize kaydedin.
                                 setBusyIo(true);
                                 try {
                                   await exportVault(path);
-                                  showToast("✓ Backup exported", "success");
+                                  showToast(t("settingsBackupExportedToast"), "success");
                                 } catch (err) {
                                   showToast(String(err), "error");
                                 } finally {
@@ -2289,16 +2290,14 @@ veya parola yoneticinize kaydedin.
                                 }
                               }}
                             >
-                              Export Backup (.pascopyof)
+                              {t("settingsExportBackupBtn")}
                             </button>
                             <button
                               type="button"
                               className="btn btn-secondary"
                               disabled={busyIo}
                               onClick={async () => {
-                                const ok = window.confirm(
-                                  "Restore will replace ALL current vault data. Continue?"
-                                );
+                                const ok = window.confirm(t("settingsRestoreConfirm"));
                                 if (!ok) return;
                                 const path = await open({
                                   multiple: false,
@@ -2308,7 +2307,7 @@ veya parola yoneticinize kaydedin.
                                 setBusyIo(true);
                                 try {
                                   await restoreVault(path);
-                                  showToast("Vault restored — unlock with the backup master password", "success");
+                                  showToast(t("settingsRestoreSuccessToast"), "success");
                                   setShowChangePassword(false);
                                   handleAutoLock();
                                 } catch (err) {
@@ -2318,7 +2317,7 @@ veya parola yoneticinize kaydedin.
                                 }
                               }}
                             >
-                              Restore Backup
+                              {t("settingsRestoreBackupBtn")}
                             </button>
                             <button
                               type="button"
@@ -2334,7 +2333,9 @@ veya parola yoneticinize kaydedin.
                                 try {
                                   const result = await importCsv(path);
                                   showToast(
-                                    `Imported ${result.imported} · skipped ${result.skipped}`,
+                                    lang === "tr"
+                                      ? `✓ ${result.imported} öğe içe aktarıldı, ${result.skipped} atlandı`
+                                      : `✓ Imported ${result.imported} · skipped ${result.skipped}`,
                                     "success"
                                   );
                                   await loadCredentials(searchQuery);
@@ -2346,7 +2347,7 @@ veya parola yoneticinize kaydedin.
                                 }
                               }}
                             >
-                              Import CSV
+                              {t("settingsImportCsvBtn")}
                             </button>
                           </div>
                         </div>

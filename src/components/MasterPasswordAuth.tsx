@@ -13,37 +13,12 @@ import {
   getPasswordHint,
   recoverVault,
   resetVault,
+  downloadRecoveryKey,
 } from "../api/vault";
 import { useApp } from "../context/AppContext";
 
 interface Props {
   onUnlocked: () => void;
-}
-
-function downloadRecoveryKeyFile(key: string) {
-  const content = `=====================================================
-PasCopyOf - Acil Durum Kurtarma Anahtari (Emergency Recovery Kit)
-Tarih: ${new Date().toLocaleString()}
-=====================================================
-
-Kurtarma Anahtariniz (Recovery Key):
-${key}
-
-ONEMLI GUVENLIK BILGISI:
-Bu anahtar, PasCopyOf kasanizin ana sifresini unuttugunuzda
-verilerinizi kurtarabilmenizi saglayan TEK anahtardir.
-Lutfen bu dosyayi guvenli bir USB bellege, harici diske
-veya parola yoneticinize kaydedin.
-=====================================================`;
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `pascopyof-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 export function MasterPasswordAuth({ onUnlocked }: Props) {
@@ -80,6 +55,42 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
   const [recoveryError, setRecoveryError] = useState("");
   const [recoveredNewKey, setRecoveredNewKey] = useState<string | null>(null);
   const [recoveredCopied, setRecoveredCopied] = useState(false);
+  const [downloadedKey, setDownloadedKey] = useState(false);
+  const [downloadingKey, setDownloadingKey] = useState(false);
+  const [recoveredDownloaded, setRecoveredDownloaded] = useState(false);
+  const [recoveredDownloading, setRecoveredDownloading] = useState(false);
+
+  const handleDownloadKey = async (key: string) => {
+    if (downloadingKey) return;
+    setDownloadingKey(true);
+    try {
+      const savedPath = await downloadRecoveryKey(key);
+      if (savedPath) {
+        setDownloadedKey(true);
+        setTimeout(() => setDownloadedKey(false), 3500);
+      }
+    } catch (err) {
+      console.error("Failed to save recovery key:", err);
+    } finally {
+      setDownloadingKey(false);
+    }
+  };
+
+  const handleDownloadRecoveredKey = async (key: string) => {
+    if (recoveredDownloading) return;
+    setRecoveredDownloading(true);
+    try {
+      const savedPath = await downloadRecoveryKey(key);
+      if (savedPath) {
+        setRecoveredDownloaded(true);
+        setTimeout(() => setRecoveredDownloaded(false), 3500);
+      }
+    } catch (err) {
+      console.error("Failed to save recovery key:", err);
+    } finally {
+      setRecoveredDownloading(false);
+    }
+  };
 
   // Reset vault state
   const [confirmResetInput, setConfirmResetInput] = useState("");
@@ -213,7 +224,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
     setRecoveryError("");
 
     if (recoveryKeyInput.trim().length < 16) {
-      setRecoveryError("Geçerli bir 24 haneli kurtarma anahtarı girin.");
+      setRecoveryError(t("onboardingKeyInvalidError"));
       return;
     }
     if (recoveryNewPw.length < 8) {
@@ -243,7 +254,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
 
     const norm = confirmResetInput.trim().toUpperCase();
     if (norm !== "SIFIRLA" && norm !== "RESET") {
-      setResetError("Lütfen onaylamak için 'SIFIRLA' veya 'RESET' yazın.");
+      setResetError(t("onboardingResetConfirmError"));
       return;
     }
 
@@ -518,9 +529,10 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
-                    onClick={() => downloadRecoveryKeyFile(generatedRecoveryKey)}
+                    onClick={() => handleDownloadKey(generatedRecoveryKey)}
+                    disabled={downloadingKey}
                   >
-                    {t("onboardingKeyDownloadBtn")}
+                    {downloadedKey ? t("onboardingKeyDownloaded") : t("onboardingKeyDownloadBtn")}
                   </button>
                 </div>
               </div>
@@ -540,7 +552,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                 <div className="shortcut-mini-card">
                   <div className="mini-card-icon">🔑</div>
                   <div className="mini-card-info">
-                    <div className="mini-card-title">Kasa Hızlı Başlatıcı</div>
+                    <div className="mini-card-title">{t("onboardingShortcutVault")}</div>
                     <kbd className="mini-card-kbd">Ctrl + Shift + Space</kbd>
                   </div>
                 </div>
@@ -548,7 +560,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                 <div className="shortcut-mini-card">
                   <div className="mini-card-icon">📋</div>
                   <div className="mini-card-info">
-                    <div className="mini-card-title">Pano Geçmişi & Arama</div>
+                    <div className="mini-card-title">{t("onboardingShortcutClip")}</div>
                     <kbd className="mini-card-kbd">Ctrl + Shift + V</kbd>
                   </div>
                 </div>
@@ -556,7 +568,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                 <div className="shortcut-mini-card">
                   <div className="mini-card-icon">📸</div>
                   <div className="mini-card-info">
-                    <div className="mini-card-title">Ekran Alıntısı & OCR</div>
+                    <div className="mini-card-title">{t("onboardingShortcutSnip")}</div>
                     <kbd className="mini-card-kbd">Ctrl + Shift + S</kbd>
                   </div>
                 </div>
@@ -564,7 +576,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                 <div className="shortcut-mini-card">
                   <div className="mini-card-icon">⚡</div>
                   <div className="mini-card-info">
-                    <div className="mini-card-title">Hızlı Görev & Sayaç</div>
+                    <div className="mini-card-title">{t("onboardingShortcutTask")}</div>
                     <kbd className="mini-card-kbd">Ctrl + Shift + N</kbd>
                   </div>
                 </div>
@@ -802,9 +814,10 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            onClick={() => downloadRecoveryKeyFile(recoveredNewKey)}
+                            onClick={() => handleDownloadRecoveredKey(recoveredNewKey)}
+                            disabled={recoveredDownloading}
                           >
-                            {t("onboardingKeyDownloadBtn")}
+                            {recoveredDownloaded ? t("onboardingKeyDownloaded") : t("onboardingKeyDownloadBtn")}
                           </button>
                         </div>
                       </div>
@@ -818,7 +831,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                             onUnlocked();
                           }}
                         >
-                          Kasanın Kilidini Aç ve Giriş Yap ✨
+                          {t("onboardingUnlockAndLoginBtn")}
                         </button>
                       </div>
                     </div>
@@ -843,7 +856,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                           <input
                             type={showRecoveryNewPw ? "text" : "password"}
                             className="form-input"
-                            placeholder="Yeni güçlü parola..."
+                            placeholder={t("onboardingNewPasswordPlaceholder")}
                             value={recoveryNewPw}
                             onChange={(e) => setRecoveryNewPw(e.target.value)}
                             disabled={recoveryLoading}
@@ -864,7 +877,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                         <input
                           type={showRecoveryNewPw ? "text" : "password"}
                           className="form-input"
-                          placeholder="Yeni parolayı tekrar girin..."
+                          placeholder={t("onboardingNewPasswordConfirmPlaceholder")}
                           value={recoveryConfirmPw}
                           onChange={(e) => setRecoveryConfirmPw(e.target.value)}
                           disabled={recoveryLoading}

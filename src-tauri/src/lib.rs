@@ -2180,6 +2180,51 @@ async fn set_launcher_shortcut(
     Ok(())
 }
 
+#[tauri::command]
+async fn save_recovery_key_file(
+    app: AppHandle,
+    path: Option<String>,
+    key: String,
+) -> Result<String, String> {
+    let target_path = match path {
+        Some(p) if !p.trim().is_empty() => std::path::PathBuf::from(p),
+        _ => {
+            let base_dir = app
+                .path()
+                .download_dir()
+                .or_else(|_| app.path().desktop_dir())
+                .or_else(|_| app.path().document_dir())
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+            base_dir.join(format!("pascopyof-recovery-key-{}.txt", date))
+        }
+    };
+
+    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let content = format!(
+"=====================================================
+PasCopyOf - Acil Durum Kurtarma Anahtari (Emergency Recovery Kit)
+Tarih: {}
+=====================================================
+
+Kurtarma Anahtariniz (Recovery Key):
+{}
+
+ONEMLI GUVENLIK BILGISI:
+Bu anahtar, PasCopyOf kasanizin ana sifresini unuttugunuzda
+verilerinizi sifir veri kaybi ile kurtarabilmenizi saglayan TEK anahtardir.
+Lutfen bu dosyayi guvenli bir USB bellege, harici diske
+veya parola yoneticinize kaydedin.
+=====================================================",
+        now, key
+    );
+
+    std::fs::write(&target_path, content.as_bytes())
+        .map_err(|e| format!("Dosya kaydedilemedi: {}", e))?;
+
+    Ok(target_path.to_string_lossy().to_string())
+}
+
 // ─── Backup / restore / CSV import ───────────────────────────────────────────
 
 #[tauri::command]
@@ -4793,6 +4838,7 @@ pub fn run() {
             toggle_quick_task,
             get_quick_task_shortcut,
             set_quick_task_shortcut,
+            save_recovery_key_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

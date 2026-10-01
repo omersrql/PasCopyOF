@@ -617,7 +617,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                           e.stopPropagation();
                           handleToggleTask(task);
                         }}
-                        title={isDone ? "Geri al" : "Tamamla"}
+                        title={isDone ? t("tasksMarkTodo") : t("tasksMarkDone")}
                       >
                         {isDone ? "✓" : ""}
                       </button>
@@ -734,7 +734,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
               {/* Status & Priority Row */}
               <div className="detail-meta-row">
                 <div className="detail-meta-item">
-                  <label className="meta-label">Durum</label>
+                  <label className="meta-label">{t("tasksStatusLabel")}</label>
                   <select
                     className="meta-select"
                     value={activeTask.status}
@@ -756,14 +756,14 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                       loadData();
                     }}
                   >
-                    <option value="todo">📝 Yapılacak</option>
-                    <option value="in_progress">⏳ Devam Ediyor</option>
-                    <option value="done">✅ Tamamlandı</option>
+                    <option value="todo">{t("tasksStatusTodo")}</option>
+                    <option value="in_progress">{t("tasksStatusInProgress")}</option>
+                    <option value="done">{t("tasksStatusDone")}</option>
                   </select>
                 </div>
 
                 <div className="detail-meta-item">
-                  <label className="meta-label">Öncelik</label>
+                  <label className="meta-label">{t("tasksPriorityLabel")}</label>
                   <select
                     className="meta-select"
                     value={activeTask.priority}
@@ -932,7 +932,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                       <div key={log.id} className="worklog-row">
                         <span className="worklog-time">
                           {log.startTime}
-                          {log.endTime ? ` → ${log.endTime}` : " (Devam ediyor)"}
+                          {log.endTime ? ` → ${log.endTime}` : t("tasksRunningSuffix")}
                         </span>
                         <span className="worklog-duration">
                           ⏱️ {formatDurationFriendly(log.durationSeconds)}
@@ -945,7 +945,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                             setWorklogs((prev) => prev.filter((w) => w.id !== log.id));
                             loadData();
                           }}
-                          title="Logu Sil"
+                          title={t("tasksDeleteWorklog")}
                         >
                           ✕
                         </button>
