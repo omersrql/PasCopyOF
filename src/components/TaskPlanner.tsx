@@ -978,14 +978,14 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
             className="modal-dialog task-delete-confirm-dialog"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 22 }}>🗑️</span>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 24, filter: "drop-shadow(0 2px 6px rgba(239, 68, 68, 0.3))" }}>🗑️</span>
                 <div>
-                  <div className="modal-title" style={{ fontSize: 16, fontWeight: 700 }}>
+                  <div className="modal-title">
                     {t("tasksDeleteModalTitle")}
                   </div>
-                  <div className="modal-subtitle" style={{ fontSize: 12 }}>
+                  <div className="modal-subtitle" style={{ color: "var(--color-danger, #ef4444)" }}>
                     {t("tasksDeleteModalIrreversible")}
                   </div>
                 </div>
@@ -1000,31 +1000,18 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-              <p style={{ margin: 0, fontSize: 13.5, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
                 {t("tasksDeleteModalDesc")}
               </p>
 
-              <div
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--color-bg-primary)",
-                  border: "1px solid var(--color-border)",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "var(--color-text-primary)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <span style={{ color: "var(--color-danger)", fontSize: 12 }}>●</span>
+              <div className="task-delete-preview-box">
+                <span style={{ color: "var(--color-danger)", fontSize: 14, flexShrink: 0 }}>●</span>
                 <span style={{ wordBreak: "break-word" }}>{taskToDelete.title}</span>
               </div>
             </div>
 
-            <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px" }}>
+            <div className="modal-footer">
               <button
                 type="button"
                 className="btn btn-secondary"

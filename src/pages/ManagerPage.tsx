@@ -1093,13 +1093,35 @@ export default function ManagerPage() {
           )}
 
           {showDeleteConfirm && (
-            <div className="modal-overlay">
-              <div className="modal-card">
-                <div className="modal-title">Delete?</div>
-                <p>Are you sure you want to delete {form.keyName}?</p>
-                <div className="modal-actions">
-                  <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-                  <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+            <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+              <div
+                className="modal-card"
+                style={{ width: 440, padding: "24px 28px", borderRadius: 16 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 26 }}>🗑️</span>
+                  <div>
+                    <div className="modal-title">
+                      {lang === "tr" ? "Kaydı Sil" : "Delete Credential"}
+                    </div>
+                    <div className="modal-subtitle" style={{ color: "var(--color-danger, #ef4444)" }}>
+                      {t("tasksDeleteModalIrreversible")}
+                    </div>
+                  </div>
+                </div>
+                <p style={{ margin: "4px 0", fontSize: 13.5, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
+                  {lang === "tr"
+                    ? `"${form.keyName}" kaydını kasadan kalıcı olarak silmek istediğinize emin misiniz?`
+                    : `Are you sure you want to permanently delete "${form.keyName}" from vault?`}
+                </p>
+                <div className="modal-actions" style={{ gap: 10, marginTop: 4 }}>
+                  <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>
+                    {t("cancel")} (Esc)
+                  </button>
+                  <button className="btn btn-danger" onClick={handleDelete}>
+                    {t("delete")}
+                  </button>
                 </div>
               </div>
             </div>
@@ -2528,9 +2550,11 @@ export default function ManagerPage() {
           )}
 
           {showCategoryManager && (
-            <div className="modal-overlay">
-              <div className="modal-card" style={{ width: 500 }}>
-                <div className="modal-title">Manage Categories</div>
+            <div className="modal-overlay" onClick={() => setShowCategoryManager(false)}>
+              <div className="modal-card" style={{ width: 500, padding: "24px 28px", borderRadius: 16 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-title" style={{ marginBottom: 4 }}>
+                  🏷️ {lang === "tr" ? "Kategorileri Yönet" : "Manage Categories"}
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
                   <div className="credential-list" style={{ maxHeight: 200, border: '1px solid var(--color-border)', borderRadius: 8 }}>
                     {categories.map(cat => (
