@@ -115,6 +115,12 @@ export const translations = {
     topbarAddCredential: "+ Yeni Kayıt",
     topbarSettings: "⚙ Ayarlar",
     topbarLock: "🔒 Kilitle",
+    topbarHelp: "❓ Kılavuz & Yardım",
+    topbarVersionNotes: "v{v} Sürüm Notları",
+    settingsHelpGuideTitle: "Kullanıcı Kılavuzu & Yardım Merkezi",
+    settingsHelpGuideDesc: "Programın tüm özellikleri, kısayol tuşları ve sorun giderme adımlarını içeren interaktif rehber.",
+    settingsHelpGuideBtn: "Kılavuzu Aç 📖",
+    settingsReleaseNotesBtn: "Sürüm Notlarını İncele ✨",
 
     // Credentials / Kayıtlar
     credSearchPlaceholder: "Kayıt ara (başlık veya kullanıcı adı)...",
@@ -477,6 +483,12 @@ export const translations = {
     topbarAddCredential: "+ Add Credential",
     topbarSettings: "⚙ Settings",
     topbarLock: "🔒 Lock",
+    topbarHelp: "❓ Help & Guide",
+    topbarVersionNotes: "v{v} Release Notes",
+    settingsHelpGuideTitle: "User Guide & Help Center",
+    settingsHelpGuideDesc: "Interactive guide covering all features, hotkeys, and troubleshooting tips.",
+    settingsHelpGuideBtn: "Open Guide 📖",
+    settingsReleaseNotesBtn: "View Release Notes ✨",
 
     // Credentials
     credSearchPlaceholder: "Search credentials (title or username)...",

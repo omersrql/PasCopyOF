@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { TaskPlanner } from "../components/TaskPlanner";
+import { UserGuideModal } from "../components/UserGuideModal";
+import { ReleaseNotesModal } from "../components/ReleaseNotesModal";
 import { ToastContainer } from "../components/Toast";
 import { useToast } from "../hooks/useToast";
 import { useVaultLock } from "../hooks/useVaultLock";
@@ -182,6 +184,10 @@ export default function ManagerPage() {
   const [generatingRecoveryKey, setGeneratingRecoveryKey] = useState(false);
   const [passwordHintInput, setPasswordHintInput] = useState("");
   const [savingPasswordHint, setSavingPasswordHint] = useState(false);
+
+  // Guide & Release Notes Modal States
+  const [showUserGuide, setShowUserGuide] = useState(false);
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -784,6 +790,14 @@ veya parola yoneticinize kaydedin.
             <div className="manager-logo-dot" />
             {t("topbarAdmin")}
           </div>
+          <button
+            type="button"
+            className="topbar-version-pill"
+            onClick={() => setShowReleaseNotes(true)}
+            title={t("topbarVersionNotes", { v: appVersion })}
+          >
+            ✨ v{appVersion}
+          </button>
           <div className="manager-nav-tabs">
             <button
               type="button"
@@ -815,6 +829,14 @@ veya parola yoneticinize kaydedin.
               <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
             </>
           )}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowUserGuide(true)}
+            title={t("topbarHelp")}
+          >
+            {t("topbarHelp")}
+          </button>
           <button className="btn btn-secondary" onClick={() => {
             setShowChangePassword(true);
             loadSettings();
@@ -2353,6 +2375,33 @@ veya parola yoneticinize kaydedin.
                           )}
                         </div>
 
+                        {/* Documentation & Help Guide Card */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>📖</span>
+                            <span>{t("settingsHelpGuideTitle")}</span>
+                          </div>
+                          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                            {t("settingsHelpGuideDesc")}
+                          </p>
+                          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => setShowUserGuide(true)}
+                            >
+                              {t("settingsHelpGuideBtn")}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => setShowReleaseNotes(true)}
+                            >
+                              {t("settingsReleaseNotesBtn")}
+                            </button>
+                          </div>
+                        </div>
+
                         {/* About Architecture Box */}
                         <div className="settings-card">
                           <div className="settings-card-title">
@@ -2436,6 +2485,8 @@ veya parola yoneticinize kaydedin.
               </div>
             </div>
           )}
+      <UserGuideModal isOpen={showUserGuide} onClose={() => setShowUserGuide(false)} />
+      <ReleaseNotesModal isOpen={showReleaseNotes} onClose={() => setShowReleaseNotes(false)} />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
