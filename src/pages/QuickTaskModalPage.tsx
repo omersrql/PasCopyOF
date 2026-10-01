@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useApp } from "../context/AppContext";
 import {
   createTask,
@@ -31,6 +32,14 @@ export default function QuickTaskModalPage() {
     }, 50);
   };
 
+  const handleClose = async () => {
+    try {
+      await getCurrentWebviewWindow().hide();
+    } catch {
+      hideQuickTask().catch(console.error);
+    }
+  };
+
   useEffect(() => {
     // Initial focus
     inputRef.current?.focus();
@@ -40,18 +49,20 @@ export default function QuickTaskModalPage() {
       resetForm();
     });
 
+    // Window-level Escape key listener for immediate dismissal
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+
     return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
       unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
-
-  const handleClose = async () => {
-    try {
-      await hideQuickTask();
-    } catch (err) {
-      console.error("Failed to hide quick task window:", err);
-    }
-  };
 
   const handleSubmit = async (withTimer: boolean) => {
     const trimmed = title.trim();
@@ -65,15 +76,28 @@ export default function QuickTaskModalPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
+    const taskTitle = trimmed;
+    const taskPriority = priority;
+    const taskRoutine = isRoutine;
+
+    // 1. Immediately hide window for zero-latency, snappy desktop experience
     try {
-      // 1. Create the task
+      await getCurrentWebviewWindow().hide();
+    } catch {
+      hideQuickTask().catch(console.error);
+    }
+
+    // 2. Reset form immediately
+    resetForm();
+
+    // 3. Perform asynchronous task creation, timer start, and event emissions
+    try {
       const newTask = await createTask({
-        title: trimmed,
-        priority,
-        isRoutine,
+        title: taskTitle,
+        priority: taskPriority,
+        isRoutine: taskRoutine,
       });
 
-      // 2. Start timer if requested
       if (withTimer) {
         try {
           await startTaskTimer(newTask.id);
@@ -83,15 +107,11 @@ export default function QuickTaskModalPage() {
         }
       }
 
-      // 3. Notify other windows (Manager, Launcher, etc.)
       await emit("tasks-changed", { id: newTask.id });
       await emit("task-updated", { id: newTask.id });
-
-      // 4. Reset & hide popup
-      resetForm();
-      await hideQuickTask();
     } catch (err) {
-      console.error("Failed to create quick task:", err);
+      console.error("Failed to create quick task in background:", err);
+    } finally {
       setIsSubmitting(false);
     }
   };

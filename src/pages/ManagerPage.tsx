@@ -536,6 +536,65 @@ export default function ManagerPage() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingQuickTaskShortcut, showToast, lang]);
 
+  // Global Escape key listener to close open modals
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (
+          recordingShortcut ||
+          recordingClipboardShortcut ||
+          recordingScreenshotShortcut ||
+          recordingTimerWidgetShortcut ||
+          recordingTasksShortcut ||
+          recordingQuickTaskShortcut
+        ) {
+          return;
+        }
+
+        if (showReleaseNotes) {
+          e.preventDefault();
+          setShowReleaseNotes(false);
+          return;
+        }
+        if (showUserGuide) {
+          e.preventDefault();
+          setShowUserGuide(false);
+          return;
+        }
+        if (showDeleteConfirm) {
+          e.preventDefault();
+          setShowDeleteConfirm(false);
+          return;
+        }
+        if (showCategoryManager) {
+          e.preventDefault();
+          setShowCategoryManager(false);
+          return;
+        }
+        if (showChangePassword) {
+          e.preventDefault();
+          setShowChangePassword(false);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    showReleaseNotes,
+    showUserGuide,
+    showDeleteConfirm,
+    showCategoryManager,
+    showChangePassword,
+    recordingShortcut,
+    recordingClipboardShortcut,
+    recordingScreenshotShortcut,
+    recordingTimerWidgetShortcut,
+    recordingTasksShortcut,
+    recordingQuickTaskShortcut,
+  ]);
+
   const saveClipboardPrefs = useCallback(
     async (overrides: {
       pageSize?: number;
@@ -785,19 +844,11 @@ veya parola yoneticinize kaydedin.
   return (
     <div className="manager-root">
       <div className="manager-topbar">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div className="manager-logo">
             <div className="manager-logo-dot" />
             {t("topbarAdmin")}
           </div>
-          <button
-            type="button"
-            className="topbar-version-pill"
-            onClick={() => setShowReleaseNotes(true)}
-            title={t("topbarVersionNotes", { v: appVersion })}
-          >
-            ✨ v{appVersion}
-          </button>
           <div className="manager-nav-tabs">
             <button
               type="button"
@@ -829,6 +880,14 @@ veya parola yoneticinize kaydedin.
               <button className="btn btn-primary" onClick={handleNewCredential}>{t("topbarAddCredential")}</button>
             </>
           )}
+          <button
+            type="button"
+            className="topbar-version-pill"
+            onClick={() => setShowReleaseNotes(true)}
+            title={t("topbarVersionNotes", { v: appVersion })}
+          >
+            ✨ v{appVersion}
+          </button>
           <button
             type="button"
             className="btn btn-secondary"

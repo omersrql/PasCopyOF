@@ -56,8 +56,24 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
   const [notesDraft, setNotesDraft] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
+  // Custom Delete Confirmation Modal State
+  const [taskToDelete, setTaskToDelete] = useState<{ id: number; title: string } | null>(null);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const activeTask = tasks.find((t) => t.id === selectedTaskId) || null;
+
+  // Escape key listener for custom delete confirmation modal
+  useEffect(() => {
+    if (!taskToDelete) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setTaskToDelete(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [taskToDelete]);
 
   // Format seconds to "1s 45dk 10sn", "1dk 30sn" or "45sn"
   const formatDurationFriendly = (secs: number) => {
@@ -388,9 +404,13 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
     }
   };
 
-  // Delete Task
-  const handleDeleteTask = async (taskId: number) => {
-    if (!confirm(t("tasksDeleteConfirm"))) return;
+  // Open custom theme-styled delete confirmation modal
+  const requestDeleteTask = (task: { id: number; title: string }) => {
+    setTaskToDelete(task);
+  };
+
+  // Execute deletion after modal confirmation
+  const executeDeleteTask = async (taskId: number) => {
     try {
       await deleteTask(taskId);
       if (selectedTaskId === taskId) {
@@ -400,10 +420,12 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
         setActiveTimer(null);
       }
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      showToast(lang === "tr" ? "Görev silindi" : "Task deleted", "info");
+      showToast(lang === "tr" ? "✓ Görev başarıyla silindi" : "✓ Task deleted successfully", "info");
       getDailySummary().then(setDailySummary).catch(console.error);
     } catch (err) {
       showToast(String(err), "error");
+    } finally {
+      setTaskToDelete(null);
     }
   };
 
@@ -650,6 +672,17 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                           {isRunning ? "⏸️" : "▶️"}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="btn-card-del"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDeleteTask({ id: task.id, title: task.title });
+                        }}
+                        title={t("delete")}
+                      >
+                        ✕
+                      </button>
                     </div>
                   </div>
                 );
@@ -690,7 +723,7 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
                   <button
                     type="button"
                     className="btn btn-secondary btn-delete-task"
-                    onClick={() => handleDeleteTask(activeTask.id)}
+                    onClick={() => requestDeleteTask({ id: activeTask.id, title: activeTask.title })}
                     title={t("delete")}
                   >
                     🗑️ {t("delete")}
@@ -937,6 +970,80 @@ export function TaskPlanner({ showToast }: TaskPlannerProps) {
           )}
         </div>
       </div>
+
+      {/* ── Theme-Styled Task Delete Confirmation Modal ── */}
+      {taskToDelete && (
+        <div className="modal-overlay" style={{ zIndex: 99999 }} onClick={() => setTaskToDelete(null)}>
+          <div
+            className="modal-dialog task-delete-confirm-dialog"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🗑️</span>
+                <div>
+                  <div className="modal-title" style={{ fontSize: 16, fontWeight: 700 }}>
+                    {t("tasksDeleteModalTitle")}
+                  </div>
+                  <div className="modal-subtitle" style={{ fontSize: 12 }}>
+                    {t("tasksDeleteModalIrreversible")}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setTaskToDelete(null)}
+                title="Esc"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
+                {t("tasksDeleteModalDesc")}
+              </p>
+
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--color-bg-primary)",
+                  border: "1px solid var(--color-border)",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "var(--color-text-primary)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <span style={{ color: "var(--color-danger)", fontSize: 12 }}>●</span>
+                <span style={{ wordBreak: "break-word" }}>{taskToDelete.title}</span>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setTaskToDelete(null)}
+              >
+                {t("cancel")} (Esc)
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => executeDeleteTask(taskToDelete.id)}
+                autoFocus
+              >
+                {t("tasksDeleteModalConfirmBtn")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
  * UserGuideModal.tsx — Comprehensive In-App User Guide & Help Center.
  * Provides interactive documentation, troubleshooting, and tips.
  */
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useApp } from "../context/AppContext";
 
 interface Props {
@@ -22,6 +22,18 @@ export function UserGuideModal({ isOpen, onClose }: Props) {
   const { lang } = useApp();
   const [activeSection, setActiveSection] = useState("vault");
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -367,7 +379,12 @@ export function UserGuideModal({ isOpen, onClose }: Props) {
               </div>
             </div>
           </div>
-          <button type="button" className="modal-close" onClick={onClose}>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            title={isTr ? "Kapat (Esc)" : "Close (Esc)"}
+          >
             ✕
           </button>
         </div>
@@ -417,12 +434,12 @@ export function UserGuideModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="modal-footer" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <div className="modal-footer guide-modal-footer">
           <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
             PasCopyOf v0.2.2 • Offline & Secure
           </div>
-          <button type="button" className="btn btn-primary" onClick={onClose}>
-            {isTr ? "Anladım, Kapat" : "Close Guide"}
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            {isTr ? "Kapat (Esc)" : "Close (Esc)"}
           </button>
         </div>
       </div>

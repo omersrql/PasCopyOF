@@ -2,6 +2,7 @@
  * ReleaseNotesModal.tsx — Changelog & Version Details Modal.
  * Displays release history, feature tags, and updates.
  */
+import { useEffect } from "react";
 import { useApp } from "../context/AppContext";
 
 interface Props {
@@ -25,6 +26,19 @@ interface ReleaseItem {
 
 export function ReleaseNotesModal({ isOpen, onClose }: Props) {
   const { lang } = useApp();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const isTr = lang === "tr";
@@ -339,7 +353,12 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
               </div>
             </div>
           </div>
-          <button type="button" className="modal-close" onClick={onClose}>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            title={isTr ? "Kapat (Esc)" : "Close (Esc)"}
+          >
             ✕
           </button>
         </div>
@@ -391,12 +410,12 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="modal-footer" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <div className="modal-footer release-modal-footer">
           <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
             PasCopyOf v0.2.2 • Designed for Power Users & SysAdmins
           </div>
-          <button type="button" className="btn btn-primary" onClick={onClose}>
-            {isTr ? "Kapat" : "Close"}
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            {isTr ? "Kapat (Esc)" : "Close (Esc)"}
           </button>
         </div>
       </div>

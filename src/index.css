@@ -5412,30 +5412,90 @@ select.form-input option:hover,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   TOPBAR VERSION PILL & IN-APP GUIDE & RELEASE NOTES
+   TOPBAR VERSION PILL & IN-APP GUIDE & RELEASE NOTES & DELETE MODAL
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 .topbar-version-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px;
-  border-radius: 9999px;
-  font-size: 11px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
   font-weight: 600;
-  background: rgba(14, 165, 233, 0.12);
+  background: rgba(14, 165, 233, 0.1);
   color: var(--color-primary);
-  border: 1px solid rgba(14, 165, 233, 0.3);
+  border: 1px solid rgba(14, 165, 233, 0.28);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
 
 .topbar-version-pill:hover {
-  background: rgba(14, 165, 233, 0.22);
+  background: rgba(14, 165, 233, 0.2);
   border-color: var(--color-primary);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
+}
+
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  transform: scale(1.06);
+}
+
+.btn-card-del {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-full);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  opacity: 0.6;
+}
+
+.btn-card-del:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.task-delete-confirm-dialog {
+  max-width: 480px;
+  width: 90vw;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(239, 68, 68, 0.2);
+  overflow: hidden;
+  animation: fadeInScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* User Guide Modal */
@@ -5454,9 +5514,24 @@ select.form-input option:hover,
 }
 
 .guide-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-primary);
+  flex-shrink: 0;
+}
+
+.guide-modal-footer,
+.release-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  flex-shrink: 0;
 }
 
 .guide-search-container {
@@ -5736,9 +5811,13 @@ select.form-input option:hover,
 }
 
 .release-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-primary);
+  flex-shrink: 0;
 }
 
 .release-notes-timeline {
