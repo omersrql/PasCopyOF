@@ -58,6 +58,11 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
       onMouseEnter={() => onMouseEnter(item, idx)}
       onMouseLeave={onMouseLeave}
     >
+      {/* Index Badge */}
+      <span className="clip-item-index" title={`#${idx + 1}`}>
+        #{idx + 1}
+      </span>
+
       {/* Left Type Icon / Thumbnail */}
       <div className="clip-item-left">
         {item.contentType === "image" && item.imageData ? (
@@ -415,25 +420,12 @@ export default function ClipboardLauncherPage() {
         return;
       }
 
-      // Calculate grid column count in fullscreen mode
-      const getColumnsCount = () => {
-        if (windowModeRef.current !== "fullscreen" || !listRef.current) return 1;
-        const firstCard = listRef.current.querySelector(".clip-item-card") as HTMLElement | null;
-        if (!firstCard) return 1;
-        const cardWidth = firstCard.offsetWidth;
-        if (cardWidth <= 0) return 1;
-        const containerWidth = listRef.current.clientWidth;
-        return Math.max(1, Math.round(containerWidth / (cardWidth + 10)));
-      };
-
-      const cols = getColumnsCount();
-
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(items.length - 1, prev + cols));
+        setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(0, prev - cols));
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
@@ -662,7 +654,7 @@ export default function ClipboardLauncherPage() {
         {/* Footer / Status bar */}
         <div className="clip-launcher-footer">
           <div className="clip-footer-hints">
-            <span className="clip-kbd">{windowMode === "fullscreen" ? "↑↓←→" : "↑↓"}</span> Gezin
+            <span className="clip-kbd">↑↓</span> Gezin
             <span className="clip-kbd">↵</span> Kopyala
             <span className="clip-kbd">Ctrl+S</span> Kasaya
             <span className="clip-kbd">Del</span> Sil
