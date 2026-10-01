@@ -47,8 +47,8 @@ export async function checkVaultInitialized(): Promise<boolean> {
   return invoke<boolean>("check_vault_initialized");
 }
 
-export async function initVault(masterPassword: string): Promise<void> {
-  return invoke<void>("init_vault", { masterPassword });
+export async function initVault(masterPassword: string, passwordHint?: string): Promise<string> {
+  return invoke<string>("init_vault", { masterPassword, passwordHint: passwordHint || null });
 }
 
 export async function unlockVault(masterPassword: string): Promise<boolean> {
@@ -66,8 +66,32 @@ export async function isVaultUnlocked(): Promise<boolean> {
 export async function changeMasterPassword(
   currentPassword: string,
   newPassword: string
-): Promise<void> {
-  return invoke<void>("change_master_password", { currentPassword, newPassword });
+): Promise<string | null> {
+  return invoke<string | null>("change_master_password", { currentPassword, newPassword });
+}
+
+export async function getPasswordHint(): Promise<string | null> {
+  return invoke<string | null>("get_password_hint");
+}
+
+export async function setPasswordHint(hint: string | null): Promise<void> {
+  return invoke<void>("set_password_hint", { hint });
+}
+
+export async function hasRecoveryKey(): Promise<boolean> {
+  return invoke<boolean>("has_recovery_key");
+}
+
+export async function generateNewRecoveryKey(): Promise<string> {
+  return invoke<string>("generate_new_recovery_key");
+}
+
+export async function recoverVault(recoveryKey: string, newMasterPassword: string): Promise<string> {
+  return invoke<string>("recover_vault", { recoveryKey, newMasterPassword });
+}
+
+export async function resetVault(confirmText: string): Promise<void> {
+  return invoke<void>("reset_vault", { confirmText });
 }
 
 export async function getCategories(): Promise<Category[]> {

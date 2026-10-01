@@ -2,15 +2,48 @@
  * MasterPasswordAuth.tsx — Guided Onboarding & Master Password Authentication.
  *
  * Modes:
- *  - "setup"  → First run guided 3-step onboarding wizard for setting the master password.
- *  - "unlock" → Vault exists, quick password unlock screen with Caps Lock & visibility toggles.
+ *  - "setup"  → First run guided 3-step onboarding wizard for setting master password & emergency recovery key.
+ *  - "unlock" → Vault exists, quick password unlock with hint support & emergency recovery/reset options.
  */
 import React, { useState, useRef, useEffect } from "react";
-import { checkVaultInitialized, initVault, unlockVault } from "../api/vault";
+import {
+  checkVaultInitialized,
+  initVault,
+  unlockVault,
+  getPasswordHint,
+  recoverVault,
+  resetVault,
+} from "../api/vault";
 import { useApp } from "../context/AppContext";
 
 interface Props {
   onUnlocked: () => void;
+}
+
+function downloadRecoveryKeyFile(key: string) {
+  const content = `=====================================================
+PasCopyOf - Acil Durum Kurtarma Anahtari (Emergency Recovery Kit)
+Tarih: ${new Date().toLocaleString()}
+=====================================================
+
+Kurtarma Anahtariniz (Recovery Key):
+${key}
+
+ONEMLI GUVENLIK BILGISI:
+Bu anahtar, PasCopyOf kasanizin ana sifresini unuttugunuzda
+verilerinizi kurtarabilmenizi saglayan TEK anahtardir.
+Lutfen bu dosyayi guvenli bir USB bellege, harici diske
+veya parola yoneticinize kaydedin.
+=====================================================`;
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pascopyof-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function MasterPasswordAuth({ onUnlocked }: Props) {
@@ -18,13 +51,40 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
   const [mode, setMode] = useState<"loading" | "setup" | "unlock">("loading");
   const [setupStep, setSetupStep] = useState<1 | 2 | 3>(1);
 
+  // Setup / Unlock state
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [passwordHint, setPasswordHintState] = useState("");
+  const [generatedRecoveryKey, setGeneratedRecoveryKey] = useState("");
+  const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [capsLockActive, setCapsLockActive] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Stored password hint in unlock mode
+  const [storedHint, setStoredHint] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
+
+  // Recovery modal state
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryTab, setRecoveryTab] = useState<"key" | "reset">("key");
+  const [recoveryKeyInput, setRecoveryKeyInput] = useState("");
+  const [recoveryNewPw, setRecoveryNewPw] = useState("");
+  const [recoveryConfirmPw, setRecoveryConfirmPw] = useState("");
+  const [showRecoveryNewPw, setShowRecoveryNewPw] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoveredNewKey, setRecoveredNewKey] = useState<string | null>(null);
+  const [recoveredCopied, setRecoveredCopied] = useState(false);
+
+  // Reset vault state
+  const [confirmResetInput, setConfirmResetInput] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -34,6 +94,13 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
       .then((initialized) => {
         if (!active) return;
         setMode(initialized ? "unlock" : "setup");
+        if (initialized) {
+          getPasswordHint()
+            .then((hint) => {
+              if (active) setStoredHint(hint);
+            })
+            .catch(() => {});
+        }
         setTimeout(() => inputRef.current?.focus(), 80);
       })
       .catch((err) => {
@@ -106,7 +173,8 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
 
     setLoading(true);
     try {
-      await initVault(password);
+      const rk = await initVault(password, passwordHint.trim() || undefined);
+      setGeneratedRecoveryKey(rk);
       setLoading(false);
       setSetupStep(3);
     } catch (err) {
@@ -126,6 +194,9 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
         onUnlocked();
       } else {
         setError(t("authIncorrectError"));
+        if (storedHint) {
+          setShowHint(true);
+        }
         setPassword("");
         inputRef.current?.focus();
       }
@@ -133,6 +204,65 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
       setError(String(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Recovery Key Submit Handler
+  const handleRecoverSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryError("");
+
+    if (recoveryKeyInput.trim().length < 16) {
+      setRecoveryError("Geçerli bir 24 haneli kurtarma anahtarı girin.");
+      return;
+    }
+    if (recoveryNewPw.length < 8) {
+      setRecoveryError(t("authMinCharsError"));
+      return;
+    }
+    if (recoveryNewPw !== recoveryConfirmPw) {
+      setRecoveryError(t("authMismatchError"));
+      return;
+    }
+
+    setRecoveryLoading(true);
+    try {
+      const freshKey = await recoverVault(recoveryKeyInput.trim(), recoveryNewPw);
+      setRecoveredNewKey(freshKey);
+      setRecoveryLoading(false);
+    } catch (err) {
+      setRecoveryError(String(err));
+      setRecoveryLoading(false);
+    }
+  };
+
+  // Clean Reset Submit Handler
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError("");
+
+    const norm = confirmResetInput.trim().toUpperCase();
+    if (norm !== "SIFIRLA" && norm !== "RESET") {
+      setResetError("Lütfen onaylamak için 'SIFIRLA' veya 'RESET' yazın.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await resetVault(confirmResetInput);
+      setResetLoading(false);
+      setShowRecoveryModal(false);
+      setMode("setup");
+      setSetupStep(1);
+      setPassword("");
+      setConfirm("");
+      setPasswordHintState("");
+      setGeneratedRecoveryKey("");
+      setRecoveryConfirmed(false);
+      setStoredHint(null);
+    } catch (err) {
+      setResetError(String(err));
+      setResetLoading(false);
     }
   };
 
@@ -196,7 +326,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
             </div>
           )}
 
-          {/* STEP 2: Password Creation with Strength Meter & Interactive Checks */}
+          {/* STEP 2: Password Creation with Strength Meter, Criteria Checks & Hint */}
           {setupStep === 2 && (
             <div className="onboarding-step-view">
               <div className="onboarding-header-compact">
@@ -287,6 +417,22 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                   </div>
                 </div>
 
+                {/* Optional Password Hint */}
+                <div className="form-group" style={{ marginTop: 2 }}>
+                  <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>{t("authPasswordHintLabel")}</span>
+                    <span style={{ fontSize: 11, opacity: 0.65 }}>💡 İsteğe bağlı</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={t("authPasswordHintPlaceholder")}
+                    value={passwordHint}
+                    onChange={(e) => setPasswordHintState(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+
                 {/* Real-time Criteria Checklist */}
                 <div className="password-criteria-list">
                   <div className={`criteria-item ${hasMinLength ? "passed" : ""}`}>
@@ -345,17 +491,52 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
             </div>
           )}
 
-          {/* STEP 3: Success Celebration & Global Shortcuts Quick Reference */}
+          {/* STEP 3: Emergency Recovery Key & Shortcut Cheat-Sheet */}
           {setupStep === 3 && (
             <div className="onboarding-step-view">
               <div className="onboarding-hero">
-                <div className="onboarding-badge-icon success-icon">🎉</div>
-                <div className="onboarding-title">{t("onboardingSuccessTitle")}</div>
-                <p className="onboarding-desc">{t("onboardingSuccessDesc")}</p>
+                <div className="onboarding-badge-icon success-icon">🛡️</div>
+                <div className="onboarding-title">{t("onboardingKeyStepTitle")}</div>
+                <p className="onboarding-desc">{t("onboardingKeyStepDesc")}</p>
               </div>
 
+              {/* Recovery Key Monospace Box */}
+              <div className="recovery-key-display-box">
+                <div className="recovery-key-code">{generatedRecoveryKey}</div>
+                <div className="recovery-key-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedRecoveryKey);
+                      setCopiedKey(true);
+                      setTimeout(() => setCopiedKey(false), 2500);
+                    }}
+                  >
+                    {copiedKey ? t("onboardingKeyCopied") : t("onboardingKeyCopyBtn")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => downloadRecoveryKeyFile(generatedRecoveryKey)}
+                  >
+                    {t("onboardingKeyDownloadBtn")}
+                  </button>
+                </div>
+              </div>
+
+              {/* Acknowledgment Checkbox */}
+              <label className="recovery-confirm-label">
+                <input
+                  type="checkbox"
+                  checked={recoveryConfirmed}
+                  onChange={(e) => setRecoveryConfirmed(e.target.checked)}
+                />
+                <span>{t("onboardingKeyConfirmCheckbox")}</span>
+              </label>
+
               {/* Shortcut Cheat-Cards */}
-              <div className="onboarding-shortcuts-grid">
+              <div className="onboarding-shortcuts-grid" style={{ marginTop: 14 }}>
                 <div className="shortcut-mini-card">
                   <div className="mini-card-icon">🔑</div>
                   <div className="mini-card-info">
@@ -389,10 +570,11 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
                 </div>
               </div>
 
-              <div className="onboarding-actions">
+              <div className="onboarding-actions" style={{ marginTop: 14 }}>
                 <button
                   type="button"
                   className="btn btn-primary btn-full onboarding-start-btn"
+                  disabled={!recoveryConfirmed}
                   onClick={onUnlocked}
                 >
                   {t("onboardingStartAppBtn")}
@@ -454,6 +636,34 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
             </div>
           </div>
 
+          {/* Password Hint Toggle & Display */}
+          {storedHint && (
+            <div className="auth-hint-container">
+              {!showHint ? (
+                <button
+                  type="button"
+                  className="auth-link-btn"
+                  onClick={() => setShowHint(true)}
+                >
+                  {t("authShowHintBtn")}
+                </button>
+              ) : (
+                <div className="auth-hint-box">
+                  <span className="auth-hint-tag">💡 {t("authHintPrefix")}</span>
+                  <span className="auth-hint-text">{storedHint}</span>
+                  <button
+                    type="button"
+                    className="auth-hint-close-btn"
+                    onClick={() => setShowHint(false)}
+                    title={t("authHideHintBtn")}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Caps Lock Alert */}
           {capsLockActive && (
             <div className="caps-lock-alert">
@@ -479,6 +689,22 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
           </button>
         </form>
 
+        {/* Forgot Password / Recovery Link */}
+        <div className="auth-footer-actions">
+          <button
+            type="button"
+            className="auth-forgot-link"
+            onClick={() => {
+              setShowRecoveryModal(true);
+              setRecoveryError("");
+              setResetError("");
+              setRecoveredNewKey(null);
+            }}
+          >
+            {t("authForgotPasswordBtn")}
+          </button>
+        </div>
+
         {/* Security note */}
         <p
           style={{
@@ -486,6 +712,7 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
             color: "var(--color-text-muted)",
             textAlign: "center",
             lineHeight: 1.6,
+            marginTop: 6,
           }}
         >
           Protected with{" "}
@@ -493,6 +720,247 @@ export function MasterPasswordAuth({ onUnlocked }: Props) {
           <span style={{ color: "var(--color-text-secondary)" }}>AES-256-GCM</span> local encryption.
         </p>
       </div>
+
+      {/* ─── RECOVERY & RESET MODAL ─── */}
+      {showRecoveryModal && (
+        <div className="modal-overlay" style={{ zIndex: 99999 }}>
+          <div className="modal-dialog recovery-modal-card">
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🆘</span>
+                <div>
+                  <div className="modal-title" style={{ fontSize: 16 }}>{t("recoveryModalTitle")}</div>
+                  <div className="modal-subtitle" style={{ fontSize: 12 }}>{t("recoveryModalSub")}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => {
+                  setShowRecoveryModal(false);
+                  setRecoveredNewKey(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="recovery-tabs">
+              <button
+                type="button"
+                className={`recovery-tab-btn ${recoveryTab === "key" ? "active" : ""}`}
+                onClick={() => {
+                  setRecoveryTab("key");
+                  setRecoveryError("");
+                }}
+              >
+                {t("recoveryTabKey")}
+              </button>
+              <button
+                type="button"
+                className={`recovery-tab-btn ${recoveryTab === "reset" ? "active danger" : ""}`}
+                onClick={() => {
+                  setRecoveryTab("reset");
+                  setResetError("");
+                }}
+              >
+                {t("recoveryTabReset")}
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ paddingTop: 14 }}>
+              {/* TAB 1: Kurtarma Anahtarı ile Aç */}
+              {recoveryTab === "key" && (
+                <div>
+                  {recoveredNewKey ? (
+                    <div className="recovery-success-box">
+                      <div className="recovery-success-header">
+                        <span style={{ fontSize: 28 }}>🎉</span>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: "var(--color-success)" }}>
+                          {t("recoverySuccessTitle")}
+                        </div>
+                      </div>
+                      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "8px 0" }}>
+                        {t("recoverySuccessDesc")}
+                      </p>
+
+                      <div className="recovery-key-display-box" style={{ margin: "12px 0" }}>
+                        <div className="recovery-key-code">{recoveredNewKey}</div>
+                        <div className="recovery-key-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(recoveredNewKey);
+                              setRecoveredCopied(true);
+                              setTimeout(() => setRecoveredCopied(false), 2500);
+                            }}
+                          >
+                            {recoveredCopied ? t("onboardingKeyCopied") : t("onboardingKeyCopyBtn")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => downloadRecoveryKeyFile(recoveredNewKey)}
+                          >
+                            {t("onboardingKeyDownloadBtn")}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            setShowRecoveryModal(false);
+                            onUnlocked();
+                          }}
+                        >
+                          Kasanın Kilidini Aç ve Giriş Yap ✨
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleRecoverSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div className="form-group">
+                        <label className="form-label">{t("recoveryKeyInputLabel")}</label>
+                        <input
+                          type="text"
+                          className="form-input recovery-key-input"
+                          placeholder={t("recoveryKeyInputPlaceholder")}
+                          value={recoveryKeyInput}
+                          onChange={(e) => setRecoveryKeyInput(e.target.value.toUpperCase())}
+                          disabled={recoveryLoading}
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">{t("recoveryNewPasswordLabel")}</label>
+                        <div className="input-with-action">
+                          <input
+                            type={showRecoveryNewPw ? "text" : "password"}
+                            className="form-input"
+                            placeholder="Yeni güçlü parola..."
+                            value={recoveryNewPw}
+                            onChange={(e) => setRecoveryNewPw(e.target.value)}
+                            disabled={recoveryLoading}
+                          />
+                          <button
+                            type="button"
+                            className="input-eye-btn"
+                            onClick={() => setShowRecoveryNewPw(!showRecoveryNewPw)}
+                            tabIndex={-1}
+                          >
+                            {showRecoveryNewPw ? "🙈" : "👁️"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">{t("recoveryNewPasswordConfirmLabel")}</label>
+                        <input
+                          type={showRecoveryNewPw ? "text" : "password"}
+                          className="form-input"
+                          placeholder="Yeni parolayı tekrar girin..."
+                          value={recoveryConfirmPw}
+                          onChange={(e) => setRecoveryConfirmPw(e.target.value)}
+                          disabled={recoveryLoading}
+                        />
+                      </div>
+
+                      {recoveryError && (
+                        <div className="form-error">
+                          <span>⚠</span> {recoveryError}
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setShowRecoveryModal(false)}
+                          disabled={recoveryLoading}
+                        >
+                          {t("cancel")}
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn btn-primary"
+                          disabled={recoveryLoading || !recoveryKeyInput.trim() || recoveryNewPw.length < 8}
+                        >
+                          {recoveryLoading ? t("loading") : t("recoverySubmitBtn")}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: Kasayı Temiz Sıfırla */}
+              {recoveryTab === "reset" && (
+                <form onSubmit={handleResetSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div className="recovery-danger-box">
+                    <div style={{ fontSize: 24 }}>⚠️</div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--color-danger)", marginBottom: 4 }}>
+                        {t("recoveryResetTitle")}
+                      </div>
+                      <p style={{ fontSize: 12.5, lineHeight: 1.5, margin: 0, color: "var(--color-text-secondary)" }}>
+                        {t("recoveryResetWarning")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      {t("recoveryResetConfirmPrompt")}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input danger-input"
+                      placeholder={t("recoveryResetPlaceholder")}
+                      value={confirmResetInput}
+                      onChange={(e) => setConfirmResetInput(e.target.value)}
+                      disabled={resetLoading}
+                    />
+                  </div>
+
+                  {resetError && (
+                    <div className="form-error">
+                      <span>⚠</span> {resetError}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setShowRecoveryModal(false)}
+                      disabled={resetLoading}
+                    >
+                      {t("cancel")}
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-danger"
+                      disabled={
+                        resetLoading ||
+                        (confirmResetInput.trim().toUpperCase() !== "SIFIRLA" &&
+                          confirmResetInput.trim().toUpperCase() !== "RESET")
+                      }
+                    >
+                      {resetLoading ? t("loading") : t("recoveryResetBtn")}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

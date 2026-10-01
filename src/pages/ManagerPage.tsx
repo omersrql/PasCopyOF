@@ -33,6 +33,10 @@ import {
   exportVault,
   restoreVault,
   importCsv,
+  hasRecoveryKey,
+  generateNewRecoveryKey,
+  getPasswordHint,
+  setPasswordHint,
 } from "../api/vault";
 import type { CredentialSafe, Category } from "../api/vault";
 import {
@@ -170,6 +174,15 @@ export default function ManagerPage() {
   const [clipboardClearSeconds, setClipboardClearSecondsState] = useState(15);
   const [autostartOn, setAutostartOn] = useState(false);
   const [busyIo, setBusyIo] = useState(false);
+
+  // Recovery Key & Password Hint State
+  const [recoveryKeyConfigured, setRecoveryKeyConfigured] = useState(false);
+  const [activeRecoveryKeyDisplay, setActiveRecoveryKeyDisplay] = useState<string | null>(null);
+  const [copiedActiveRecoveryKey, setCopiedActiveRecoveryKey] = useState(false);
+  const [generatingRecoveryKey, setGeneratingRecoveryKey] = useState(false);
+  const [passwordHintInput, setPasswordHintInput] = useState("");
+  const [savingPasswordHint, setSavingPasswordHint] = useState(false);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { toasts, showToast, removeToast } = useToast();
@@ -283,6 +296,8 @@ export default function ManagerPage() {
       getTimerWidgetShortcut().then(setTimerWidgetShortcutState).catch(() => {});
       getTasksShortcut().then(setTasksShortcutState).catch(() => {});
       getQuickTaskShortcut().then(setQuickTaskShortcutState).catch(() => {});
+      hasRecoveryKey().then(setRecoveryKeyConfigured).catch(() => {});
+      getPasswordHint().then((h) => setPasswordHintInput(h || "")).catch(() => {});
       if (arguments[4] || true) {
         getAppVersion().then(setAppVersion);
       }
@@ -700,8 +715,19 @@ export default function ManagerPage() {
     }
 
     try {
-      await changeMasterPassword(changePwForm.current, changePwForm.next);
-      showToast("✓ Master password changed", "success");
+      const rotatedKey = await changeMasterPassword(changePwForm.current, changePwForm.next);
+      if (rotatedKey) {
+        setActiveRecoveryKeyDisplay(rotatedKey);
+        setRecoveryKeyConfigured(true);
+        showToast(
+          lang === "tr"
+            ? "✓ Ana parola güncellendi. Yeni kurtarma anahtarınız oluşturuldu!"
+            : "✓ Master password changed. A new recovery key was generated!",
+          "success"
+        );
+      } else {
+        showToast("✓ Master password changed", "success");
+      }
       setShowChangePassword(false);
       setChangePwForm({ current: "", next: "", confirm: "" });
     } catch (err) {
@@ -720,6 +746,32 @@ export default function ManagerPage() {
   function getInitials(name: string) {
     if (!name) return "??";
     return name.slice(0, 2).toLowerCase();
+  }
+
+  function downloadRecoveryKeyFile(key: string) {
+    const content = `=====================================================
+PasCopyOf - Acil Durum Kurtarma Anahtari (Emergency Recovery Kit)
+Tarih: ${new Date().toLocaleString()}
+=====================================================
+
+Kurtarma Anahtariniz (Recovery Key):
+${key}
+
+ONEMLI GUVENLIK BILGISI:
+Bu anahtar, PasCopyOf kasanizin ana sifresini unuttugunuzda
+verilerinizi kurtarabilmenizi saglayan TEK anahtardir.
+Lutfen bu dosyayi guvenli bir USB bellege, harici diske
+veya parola yoneticinize kaydedin.
+=====================================================`;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pascopyof-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -1966,6 +2018,125 @@ export default function ManagerPage() {
                               <button type="submit" className="btn btn-primary">Parolayı Güncelle</button>
                             </div>
                           </form>
+                        </div>
+
+                        {/* Emergency Recovery Key Card */}
+                        <div className="settings-card">
+                          <div className="settings-card-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span>🛡️</span>
+                              <span>{t("settingsRecoveryCardTitle")}</span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: "3px 8px",
+                                borderRadius: 6,
+                                backgroundColor: recoveryKeyConfigured ? "rgba(34, 197, 94, 0.15)" : "rgba(234, 179, 8, 0.15)",
+                                color: recoveryKeyConfigured ? "var(--color-success, #22c55e)" : "var(--color-warning, #eab308)",
+                              }}
+                            >
+                              {recoveryKeyConfigured ? t("settingsRecoveryActiveBadge") : t("settingsRecoveryInactiveBadge")}
+                            </span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            {t("settingsRecoveryCardDesc")}
+                          </p>
+
+                          {activeRecoveryKeyDisplay && (
+                            <div className="recovery-key-display-box" style={{ margin: "10px 0" }}>
+                              <div className="recovery-key-code">{activeRecoveryKeyDisplay}</div>
+                              <div className="recovery-key-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(activeRecoveryKeyDisplay);
+                                    setCopiedActiveRecoveryKey(true);
+                                    setTimeout(() => setCopiedActiveRecoveryKey(false), 2500);
+                                  }}
+                                >
+                                  {copiedActiveRecoveryKey ? t("onboardingKeyCopied") : t("onboardingKeyCopyBtn")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => downloadRecoveryKeyFile(activeRecoveryKeyDisplay)}
+                                >
+                                  {t("onboardingKeyDownloadBtn")}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              disabled={generatingRecoveryKey}
+                              onClick={async () => {
+                                setGeneratingRecoveryKey(true);
+                                try {
+                                  const key = await generateNewRecoveryKey();
+                                  setActiveRecoveryKeyDisplay(key);
+                                  setRecoveryKeyConfigured(true);
+                                  showToast(
+                                    lang === "tr"
+                                      ? "✓ Yeni kurtarma anahtarı üretildi. Lütfen güvenle saklayın!"
+                                      : "✓ New recovery key generated. Please save it securely!",
+                                    "success"
+                                  );
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                } finally {
+                                  setGeneratingRecoveryKey(false);
+                                }
+                              }}
+                            >
+                              {generatingRecoveryKey ? t("loading") : t("settingsRecoveryGenerateBtn")}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Password Hint Card */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>💡</span>
+                            <span>{t("settingsPasswordHintTitle")}</span>
+                          </div>
+                          <p className="settings-hint" style={{ margin: 0 }}>
+                            {t("settingsPasswordHintDesc")}
+                          </p>
+                          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder={t("authPasswordHintPlaceholder")}
+                              value={passwordHintInput}
+                              onChange={(e) => setPasswordHintInput(e.target.value)}
+                              disabled={savingPasswordHint}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ whiteSpace: "nowrap" }}
+                              disabled={savingPasswordHint}
+                              onClick={async () => {
+                                setSavingPasswordHint(true);
+                                try {
+                                  await setPasswordHint(passwordHintInput.trim() || null);
+                                  showToast(t("settingsPasswordHintSavedToast"), "success");
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                } finally {
+                                  setSavingPasswordHint(false);
+                                }
+                              }}
+                            >
+                              {savingPasswordHint ? t("loading") : t("settingsPasswordHintSaveBtn")}
+                            </button>
+                          </div>
                         </div>
 
                         {/* Password Clipboard Clear Seconds */}

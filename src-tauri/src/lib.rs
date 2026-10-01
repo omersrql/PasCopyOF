@@ -463,6 +463,54 @@ fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+// ─── Emergency Recovery Key Helpers ──────────────────────────────────────────
+
+fn generate_recovery_key_string() -> String {
+    const CHARSET: &[u8] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let mut bytes = [0u8; 20];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let mut chars = Vec::with_capacity(20);
+    for b in bytes {
+        chars.push(CHARSET[(b as usize) % CHARSET.len()] as char);
+    }
+    let s: String = chars.into_iter().collect();
+    format!(
+        "PCYF-{}-{}-{}-{}-{}",
+        &s[0..4],
+        &s[4..8],
+        &s[8..12],
+        &s[12..16],
+        &s[16..20]
+    )
+}
+
+fn clean_recovery_key_str(input: &str) -> String {
+    input
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_uppercase()
+}
+
+fn setup_recovery_for_key(conn: &Connection, key: &[u8; 32], recovery_key_str: &str) -> Result<()> {
+    let clean_key = clean_recovery_key_str(recovery_key_str);
+    let mut salt_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut salt_bytes);
+    let recovery_salt_hex = hex::encode(salt_bytes);
+
+    let recovery_derived_key = derive_key(&clean_key, &recovery_salt_hex)?;
+    let key_hex = hex::encode(key);
+    let recovery_vault_blob = encrypt(&recovery_derived_key, &key_hex)?;
+    let recovery_verify = encrypt(&recovery_derived_key, VERIFY_MESSAGE)?;
+
+    set_meta(conn, "recovery_salt", &recovery_salt_hex)?;
+    set_meta(conn, "recovery_vault_blob", &recovery_vault_blob)?;
+    set_meta(conn, "recovery_verify", &recovery_verify)?;
+    let now = chrono::Local::now().to_rfc3339();
+    set_meta(conn, "recovery_created_at", &now)?;
+    Ok(())
+}
+
 // ─── Idle / activity helpers ─────────────────────────────────────────────────
 
 fn touch_activity(st: &mut AppState) {
@@ -1362,7 +1410,11 @@ async fn check_vault_initialized(state: State<'_, SafeAppState>) -> Result<bool,
 }
 
 #[tauri::command]
-async fn init_vault(masterPassword: String, state: State<'_, SafeAppState>) -> Result<(), String> {
+async fn init_vault(
+    masterPassword: String,
+    passwordHint: Option<String>,
+    state: State<'_, SafeAppState>,
+) -> Result<String, String> {
     let mut st = state.0.lock().map_err(|e| e.to_string())?;
 
     let mut salt_bytes = [0u8; 32];
@@ -1376,9 +1428,20 @@ async fn init_vault(masterPassword: String, state: State<'_, SafeAppState>) -> R
     let blob = encrypt(&key, VERIFY_MESSAGE).map_err(|e| e.to_string())?;
     set_meta(&conn, "verify", &blob).map_err(|e| e.to_string())?;
 
+    if let Some(hint) = passwordHint {
+        let trimmed = hint.trim();
+        if !trimmed.is_empty() {
+            let _ = set_meta(&conn, "password_hint", trimmed);
+        }
+    }
+
+    // Generate emergency recovery key
+    let recovery_key = generate_recovery_key_string();
+    setup_recovery_for_key(&conn, &key, &recovery_key).map_err(|e| e.to_string())?;
+
     st.encryption_key = Some(key);
     touch_activity(&mut st);
-    Ok(())
+    Ok(recovery_key)
 }
 
 #[tauri::command]
@@ -1412,7 +1475,7 @@ async fn change_master_password(
     currentPassword: String,
     newPassword: String,
     state: State<'_, SafeAppState>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let verified = unlock_vault(currentPassword, state.clone()).await?;
     if !verified {
         return Err("Current password is incorrect".into());
@@ -1453,8 +1516,169 @@ async fn change_master_password(
     let verify_blob = encrypt(&new_key, VERIFY_MESSAGE).map_err(|e| e.to_string())?;
     set_meta(&conn, "salt", &new_salt_hex).map_err(|e| e.to_string())?;
     set_meta(&conn, "verify", &verify_blob).map_err(|e| e.to_string())?;
+
+    // If recovery was previously configured, rotate/update recovery key with the new master key
+    let mut updated_recovery_key: Option<String> = None;
+    if get_meta(&conn, "recovery_salt").is_some() {
+        let rk = generate_recovery_key_string();
+        setup_recovery_for_key(&conn, &new_key, &rk).map_err(|e| e.to_string())?;
+        updated_recovery_key = Some(rk);
+    }
+
     st.encryption_key = Some(new_key);
     touch_activity(&mut st);
+    Ok(updated_recovery_key)
+}
+
+#[tauri::command]
+async fn get_password_hint(state: State<'_, SafeAppState>) -> Result<Option<String>, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    Ok(get_meta(&conn, "password_hint"))
+}
+
+#[tauri::command]
+async fn set_password_hint(hint: Option<String>, state: State<'_, SafeAppState>) -> Result<(), String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    match hint {
+        Some(h) if !h.trim().is_empty() => {
+            set_meta(&conn, "password_hint", h.trim()).map_err(|e| e.to_string())?;
+        }
+        _ => {
+            let _ = conn.execute("DELETE FROM meta WHERE key = 'password_hint'", []);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn has_recovery_key(state: State<'_, SafeAppState>) -> Result<bool, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    Ok(get_meta(&conn, "recovery_salt").is_some() && get_meta(&conn, "recovery_vault_blob").is_some())
+}
+
+#[tauri::command]
+async fn generate_new_recovery_key(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let key = require_key(&mut st)?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    let recovery_key = generate_recovery_key_string();
+    setup_recovery_for_key(&conn, &key, &recovery_key).map_err(|e| e.to_string())?;
+    Ok(recovery_key)
+}
+
+#[tauri::command]
+async fn recover_vault(
+    recoveryKey: String,
+    newMasterPassword: String,
+    state: State<'_, SafeAppState>,
+) -> Result<String, String> {
+    if newMasterPassword.len() < 8 {
+        return Err("Yeni ana parola en az 8 karakter olmalıdır.".into());
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    let recovery_salt = get_meta(&conn, "recovery_salt")
+        .ok_or_else(|| "Kayıtlı kurtarma anahtarı bulunamadı.".to_string())?;
+    let recovery_blob = get_meta(&conn, "recovery_vault_blob")
+        .ok_or_else(|| "Kayıtlı kurtarma verisi bulunamadı.".to_string())?;
+    let recovery_verify = get_meta(&conn, "recovery_verify");
+
+    let clean_key = clean_recovery_key_str(&recoveryKey);
+    if clean_key.len() < 16 {
+        return Err("Geçersiz kurtarma anahtarı biçimi.".into());
+    }
+
+    let recovery_derived_key = derive_key(&clean_key, &recovery_salt).map_err(|e| e.to_string())?;
+
+    // Verify recovery key
+    if let Some(verify_blob) = recovery_verify {
+        match decrypt(&recovery_derived_key, &verify_blob) {
+            Ok(msg) if msg == VERIFY_MESSAGE => {}
+            _ => return Err("Kurtarma anahtarı geçersiz veya hatalı.".into()),
+        }
+    }
+
+    // Decrypt the original master key
+    let original_master_key_hex = decrypt(&recovery_derived_key, &recovery_blob)
+        .map_err(|_| "Kurtarma anahtarı geçersiz veya veri çözülemedi.".to_string())?;
+    let master_key_bytes = hex::decode(&original_master_key_hex)
+        .map_err(|e| format!("Kasa anahtarı çözümlenemedi: {}", e))?;
+    if master_key_bytes.len() != 32 {
+        return Err("Geçersiz kasa anahtarı boyutu.".into());
+    }
+    let mut old_key = [0u8; 32];
+    old_key.copy_from_slice(&master_key_bytes);
+
+    // Derive new key from newMasterPassword
+    let mut salt_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut salt_bytes);
+    let new_salt_hex = hex::encode(salt_bytes);
+    let new_key = derive_key(&newMasterPassword, &new_salt_hex).map_err(|e| e.to_string())?;
+
+    // Re-encrypt all credentials with new_key
+    let mut creds: Vec<(i64, String)> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, password_encrypted FROM credentials")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            creds.push(row.map_err(|e| e.to_string())?);
+        }
+    }
+
+    for (id, encrypted) in creds {
+        let plaintext = decrypt(&old_key, &encrypted).map_err(|e| e.to_string())?;
+        let new_encrypted = encrypt(&new_key, &plaintext).map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE credentials SET password_encrypted = ?1 WHERE id = ?2",
+            params![new_encrypted, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let verify_blob = encrypt(&new_key, VERIFY_MESSAGE).map_err(|e| e.to_string())?;
+    set_meta(&conn, "salt", &new_salt_hex).map_err(|e| e.to_string())?;
+    set_meta(&conn, "verify", &verify_blob).map_err(|e| e.to_string())?;
+
+    // Generate brand new recovery key for the new master key
+    let new_recovery_key = generate_recovery_key_string();
+    setup_recovery_for_key(&conn, &new_key, &new_recovery_key).map_err(|e| e.to_string())?;
+
+    st.encryption_key = Some(new_key);
+    touch_activity(&mut st);
+
+    Ok(new_recovery_key)
+}
+
+#[tauri::command]
+async fn reset_vault(
+    confirmText: String,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let normalized = confirmText.trim().to_uppercase();
+    if normalized != "SIFIRLA" && normalized != "RESET" {
+        return Err("Onaylamak için lütfen 'SIFIRLA' veya 'RESET' yazın.".into());
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+
+    conn.execute("DELETE FROM credentials", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM categories", []).map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM meta WHERE key IN ('salt', 'verify', 'recovery_salt', 'recovery_vault_blob', 'recovery_verify', 'recovery_created_at', 'password_hint')",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    st.encryption_key = None;
     Ok(())
 }
 
@@ -4478,6 +4702,12 @@ pub fn run() {
             unlock_vault,
             lock_vault,
             change_master_password,
+            get_password_hint,
+            set_password_hint,
+            has_recovery_key,
+            generate_new_recovery_key,
+            recover_vault,
+            reset_vault,
             search_credentials,
             copy_password,
             copy_username,
