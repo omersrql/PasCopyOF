@@ -1410,6 +1410,11 @@ select.form-input option:hover,
   box-sizing: border-box;
 }
 
+.clip-launcher-root.preview-left {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
 .clip-launcher-root.fullscreen {
   position: fixed;
   inset: 0;
@@ -1425,6 +1430,10 @@ select.form-input option:hover,
   box-sizing: border-box;
   animation: launcher-backdrop-fade 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   overflow: hidden;
+}
+
+.clip-launcher-root.fullscreen.preview-left {
+  flex-direction: row-reverse;
 }
 
 @keyframes launcher-backdrop-fade {
@@ -1943,6 +1952,21 @@ select.form-input option:hover,
   from {
     opacity: 0;
     transform: translateX(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.clip-launcher-root.preview-left .clip-preview-popover {
+  animation: preview-popover-in-left 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes preview-popover-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(12px) scale(0.96);
   }
   to {
     opacity: 1;

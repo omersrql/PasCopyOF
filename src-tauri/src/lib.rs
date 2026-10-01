@@ -811,6 +811,7 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
                 let win_w_phys = window_width * scale;
                 let win_h_phys = window_height * scale;
 
+                let mut tx_shifted_left = false;
                 let (target_x, target_y) = if let Some((cur_x, cur_y)) = cursor {
                     let mut tx = cur_x as f64 + 10.0;
                     let mut ty = cur_y as f64 + 10.0;
@@ -820,6 +821,7 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
 
                     if tx > max_x {
                         tx = cur_x as f64 - win_w_phys - 10.0;
+                        tx_shifted_left = true;
                     }
                     if ty > max_y {
                         ty = cur_y as f64 - win_h_phys - 10.0;
@@ -845,10 +847,14 @@ fn show_clipboard_launcher_window(app: &AppHandle) -> Result<(), String> {
                 let _ = window.show();
                 let _ = window.set_position(pos); // ensure applied after shown
                 let _ = window.set_focus();
+
+                let side = if tx_shifted_left { "left" } else { "right" };
+                let _ = app.emit("clipboard-launcher-side", side);
             } else {
                 let _ = window.center();
                 let _ = window.show();
                 let _ = window.set_focus();
+                let _ = app.emit("clipboard-launcher-side", "right");
             }
         }
     }

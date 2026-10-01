@@ -179,6 +179,7 @@ export default function ClipboardLauncherPage() {
   const [clearSearchOnOpen, setClearSearchOnOpen] = useState<boolean>(true);
   const [pageSize, setPageSize] = useState<number>(100);
   const [panelScale, setPanelScale] = useState<"small" | "medium" | "large">("medium");
+  const [previewSide, setPreviewSide] = useState<"left" | "right">("right");
 
   const unfilteredItemsRef = useRef<ClipboardItem[]>([]);
   const searchReqIdRef = useRef<number>(0);
@@ -197,6 +198,19 @@ export default function ClipboardLauncherPage() {
   const pageSizeRef = useRef(pageSize);
   pageSizeRef.current = pageSize;
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const updateElementSide = useCallback((targetEl?: HTMLElement | null) => {
+    if (windowModeRef.current === "fullscreen") {
+      if (targetEl) {
+        const rect = targetEl.getBoundingClientRect();
+        if (rect.left + rect.width / 2 > window.innerWidth / 2) {
+          setPreviewSide("left");
+        } else {
+          setPreviewSide("right");
+        }
+      }
+    }
+  }, []);
 
   const { toasts, showToast, removeToast } = useToast();
 
@@ -288,12 +302,42 @@ export default function ClipboardLauncherPage() {
       unlistenSettings = fn;
     });
 
+    let unlistenSide: (() => void) | null = null;
+    listen<string>("clipboard-launcher-side", (event) => {
+      if (windowModeRef.current !== "fullscreen") {
+        setPreviewSide(event.payload === "left" ? "left" : "right");
+      }
+    }).then((fn) => {
+      unlistenSide = fn;
+    });
+
     return () => {
       unlistenFocus.then((fn) => fn());
       if (unlistenEvent) unlistenEvent();
       if (unlistenSettings) unlistenSettings();
+      if (unlistenSide) unlistenSide();
     };
   }, [fetchItems, filterType, query, loadSettings]);
+
+  // Synchronize popup preview side on window mount/resize
+  useEffect(() => {
+    if (windowMode !== "fullscreen") {
+      const detectSide = () => {
+        try {
+          const screenW = window.screen.availWidth || window.screen.width || 1920;
+          const winX = window.screenX || window.screenLeft || 0;
+          if (winX > screenW * 0.45 || (winX + 530 + 360) > screenW - 20) {
+            setPreviewSide("left");
+          } else {
+            setPreviewSide("right");
+          }
+        } catch {}
+      };
+      detectSide();
+      window.addEventListener("resize", detectSide);
+      return () => window.removeEventListener("resize", detectSide);
+    }
+  }, [windowMode]);
 
   // Handle Search Input: Instant in-memory filter + 150ms debounced backend search
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -473,9 +517,10 @@ export default function ClipboardLauncherPage() {
   // Scroll selected into view & keyboard linger preview
   useEffect(() => {
     if (listRef.current) {
-      const activeEl = listRef.current.children[selectedIndex] as HTMLElement;
+      const activeEl = listRef.current.children[selectedIndex] as HTMLElement | undefined;
       if (activeEl) {
         activeEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        updateElementSide(activeEl);
       }
     }
 
@@ -501,11 +546,16 @@ export default function ClipboardLauncherPage() {
     return () => {
       if (keyHoverTimerRef.current) clearTimeout(keyHoverTimerRef.current);
     };
-  }, [selectedIndex, items, previewDelayMs]);
+  }, [selectedIndex, items, previewDelayMs, updateElementSide]);
 
   // Mouse hover handlers
   const handleItemMouseEnter = useCallback((item: ClipboardItem, idx: number) => {
     setSelectedIndex(idx);
+    if (listRef.current) {
+      const el = listRef.current.children[idx] as HTMLElement | undefined;
+      if (el) updateElementSide(el);
+    }
+
     if (hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
@@ -522,7 +572,7 @@ export default function ClipboardLauncherPage() {
         }, previewDelayMs);
       }
     }
-  }, [previewDelayMs]);
+  }, [previewDelayMs, updateElementSide]);
 
   const handleItemMouseLeave = useCallback(() => {
     if (hoverPreviewItemRef.current === null && hoverTimerRef.current) {
@@ -566,7 +616,7 @@ export default function ClipboardLauncherPage() {
   return (
     <div
       ref={rootRef}
-      className={`clip-launcher-root ${windowMode === "fullscreen" ? "fullscreen" : "popup"}`}
+      className={`clip-launcher-root ${windowMode === "fullscreen" ? "fullscreen" : "popup"} ${previewSide === "left" ? "preview-left" : "preview-right"}`}
       data-scale={panelScale}
       onClick={handleBackdropClick}
       onMouseLeave={handleRootMouseLeave}
