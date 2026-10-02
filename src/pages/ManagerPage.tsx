@@ -63,6 +63,8 @@ import {
   setTasksShortcut,
   getQuickTaskShortcut,
   setQuickTaskShortcut,
+  getCompleteTaskShortcut,
+  setCompleteTaskShortcut,
 } from "../api/tasks";
 import { useApp } from "../context/AppContext";
 import type { AppTheme, AppLanguage } from "../api/config";
@@ -152,6 +154,7 @@ export default function ManagerPage() {
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
   const [screenshotNotificationEnabled, setScreenshotNotificationEnabled] = useState(true);
+  const [screenshotMultiMonitorEnabled, setScreenshotMultiMonitorEnabled] = useState(false);
   const [screenshotSaveDir, setScreenshotSaveDir] = useState("");
   const [screenshotDefaultSaveDir, setScreenshotDefaultSaveDir] = useState("");
   const [recordingScreenshotShortcut, setRecordingScreenshotShortcut] = useState(false);
@@ -167,6 +170,10 @@ export default function ManagerPage() {
   // Quick Task Shortcut State
   const [quickTaskShortcut, setQuickTaskShortcutState] = useState("Ctrl+Shift+N");
   const [recordingQuickTaskShortcut, setRecordingQuickTaskShortcut] = useState(false);
+
+  // Complete Task Shortcut State
+  const [completeTaskShortcut, setCompleteTaskShortcutState] = useState("Ctrl+Shift+D");
+  const [recordingCompleteTaskShortcut, setRecordingCompleteTaskShortcut] = useState(false);
 
   // Software Updates State
   const [appVersion, setAppVersion] = useState("0.2.0");
@@ -291,6 +298,7 @@ export default function ManagerPage() {
           notificationEnabled: true,
           saveDir: "",
           defaultSaveDir: "",
+          multiMonitorEnabled: false,
         })),
         getClipboardClearSeconds().catch(() => 15),
         getAppVersion().catch(() => "0.2.0"),
@@ -317,12 +325,14 @@ export default function ManagerPage() {
       if (scSettings) {
         setScreenshotShortcutState(scSettings.shortcut);
         setScreenshotNotificationEnabled(scSettings.notificationEnabled);
+        setScreenshotMultiMonitorEnabled(scSettings.multiMonitorEnabled ?? false);
         setScreenshotSaveDir(scSettings.saveDir || "");
         setScreenshotDefaultSaveDir(scSettings.defaultSaveDir || "");
       }
       getTimerWidgetShortcut().then(setTimerWidgetShortcutState).catch(() => {});
       getTasksShortcut().then(setTasksShortcutState).catch(() => {});
       getQuickTaskShortcut().then(setQuickTaskShortcutState).catch(() => {});
+      getCompleteTaskShortcut().then(setCompleteTaskShortcutState).catch(() => {});
       hasRecoveryKey().then(setRecoveryKeyConfigured).catch(() => {});
       getPasswordHint().then((h) => setPasswordHintInput(h || "")).catch(() => {});
       if (arguments[4] || true) {
@@ -557,6 +567,42 @@ export default function ManagerPage() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingQuickTaskShortcut, showToast, lang]);
 
+  useEffect(() => {
+    if (!recordingCompleteTaskShortcut) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setRecordingCompleteTaskShortcut(false);
+        return;
+      }
+
+      const next = shortcutFromEvent(e);
+      if (!next) return;
+
+      setRecordingCompleteTaskShortcut(false);
+      void (async () => {
+        try {
+          await setCompleteTaskShortcut(next);
+          setCompleteTaskShortcutState(next);
+          showToast(
+            lang === "tr"
+              ? `✓ Görevi tamamlama kısayolu ${next} olarak ayarlandı`
+              : `✓ Complete task shortcut set to ${next}`,
+            "success"
+          );
+        } catch (err) {
+          showToast(String(err), "error");
+        }
+      })();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recordingCompleteTaskShortcut, showToast, lang]);
+
   // Global Escape key listener to close open modals
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -567,7 +613,8 @@ export default function ManagerPage() {
           recordingScreenshotShortcut ||
           recordingTimerWidgetShortcut ||
           recordingTasksShortcut ||
-          recordingQuickTaskShortcut
+          recordingQuickTaskShortcut ||
+          recordingCompleteTaskShortcut
         ) {
           return;
         }
@@ -624,6 +671,7 @@ export default function ManagerPage() {
     recordingTimerWidgetShortcut,
     recordingTasksShortcut,
     recordingQuickTaskShortcut,
+    recordingCompleteTaskShortcut,
   ]);
 
   const saveClipboardPrefs = useCallback(
@@ -1137,6 +1185,7 @@ export default function ManagerPage() {
                   setRecordingTimerWidgetShortcut(false);
                   setRecordingTasksShortcut(false);
                   setRecordingQuickTaskShortcut(false);
+                  setRecordingCompleteTaskShortcut(false);
                 }
               }}
             >
@@ -1172,6 +1221,7 @@ export default function ManagerPage() {
                       setRecordingTimerWidgetShortcut(false);
                       setRecordingTasksShortcut(false);
                       setRecordingQuickTaskShortcut(false);
+                      setRecordingCompleteTaskShortcut(false);
                     }}
                     title="Kapat (Esc)"
                   >
@@ -1508,6 +1558,29 @@ export default function ManagerPage() {
                                 onClick={() => setRecordingQuickTaskShortcut(true)}
                               >
                                 {recordingQuickTaskShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 7. Complete Active Task */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">✓</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsCompleteTaskShortcutTitle")}</div>
+                                <div className="shortcut-hub-desc">{t("settingsCompleteTaskShortcutHint")}</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingCompleteTaskShortcut ? "recording" : ""}`}>
+                                {recordingCompleteTaskShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : completeTaskShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingCompleteTaskShortcut(true)}
+                              >
+                                {recordingCompleteTaskShortcut ? "..." : t("edit")}
                               </button>
                             </div>
                           </div>
@@ -2073,7 +2146,11 @@ export default function ManagerPage() {
                                 const next = e.target.checked;
                                 setScreenshotNotificationEnabled(next);
                                 try {
-                                  await updateScreenshotSettings(next);
+                                  await updateScreenshotSettings(
+                                    next,
+                                    screenshotSaveDir || undefined,
+                                    screenshotMultiMonitorEnabled
+                                  );
                                   showToast(
                                     next
                                       ? (lang === "tr" ? "Ekran görüntüsü bildirimi aktif" : "Screenshot notification enabled")
@@ -2089,6 +2166,71 @@ export default function ManagerPage() {
                           </label>
                           <p className="settings-hint" style={{ marginTop: -2 }}>
                             {t("settingsScreenshotNotifyHint")}
+                          </p>
+                        </div>
+
+                        {/* Multi-Monitor Scope */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>🖥️</span>
+                            <span>{t("settingsScreenshotScopeTitle")}</span>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.9rem" }}>
+                              <input
+                                type="radio"
+                                name="screenshotScope"
+                                checked={!screenshotMultiMonitorEnabled}
+                                onChange={async () => {
+                                  setScreenshotMultiMonitorEnabled(false);
+                                  try {
+                                    await updateScreenshotSettings(
+                                      screenshotNotificationEnabled,
+                                      screenshotSaveDir || undefined,
+                                      false
+                                    );
+                                    showToast(
+                                      lang === "tr"
+                                        ? "Ekran alıntısı kapsamı: Aktif Monitör"
+                                        : "Screenshot scope: Active Monitor",
+                                      "success"
+                                    );
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>{t("settingsScreenshotScopeActive")}</span>
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.9rem" }}>
+                              <input
+                                type="radio"
+                                name="screenshotScope"
+                                checked={screenshotMultiMonitorEnabled}
+                                onChange={async () => {
+                                  setScreenshotMultiMonitorEnabled(true);
+                                  try {
+                                    await updateScreenshotSettings(
+                                      screenshotNotificationEnabled,
+                                      screenshotSaveDir || undefined,
+                                      true
+                                    );
+                                    showToast(
+                                      lang === "tr"
+                                        ? "Ekran alıntısı kapsamı: Tüm Monitörler (Birleşik)"
+                                        : "Screenshot scope: All Monitors (Combined)",
+                                      "success"
+                                    );
+                                  } catch (err) {
+                                    showToast(String(err), "error");
+                                  }
+                                }}
+                              />
+                              <span>{t("settingsScreenshotScopeAll")}</span>
+                            </label>
+                          </div>
+                          <p className="settings-hint" style={{ marginTop: 8 }}>
+                            {t("settingsScreenshotScopeHint")}
                           </p>
                         </div>
                       </>

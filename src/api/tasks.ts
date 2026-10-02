@@ -111,6 +111,14 @@ export async function setQuickTaskShortcut(shortcut: string): Promise<void> {
   await invoke("set_quick_task_shortcut", { shortcut });
 }
 
+export async function getCompleteTaskShortcut(): Promise<string> {
+  return await invoke<string>("get_complete_task_shortcut");
+}
+
+export async function setCompleteTaskShortcut(shortcut: string): Promise<void> {
+  await invoke("set_complete_task_shortcut", { shortcut });
+}
+
 export async function getTimerStatus(): Promise<TimerStatusInfo> {
   return await invoke<TimerStatusInfo>("get_timer_status");
 }

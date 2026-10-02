@@ -42,6 +42,7 @@ export interface ScreenshotSettings {
   notificationEnabled: boolean;
   saveDir: string;
   defaultSaveDir: string;
+  multiMonitorEnabled: boolean;
 }
 
 export async function getScreenshotSettings(): Promise<ScreenshotSettings> {
@@ -50,11 +51,13 @@ export async function getScreenshotSettings(): Promise<ScreenshotSettings> {
 
 export async function updateScreenshotSettings(
   notificationEnabled: boolean,
-  saveDir?: string
+  saveDir?: string,
+  multiMonitorEnabled?: boolean
 ): Promise<ScreenshotSettings> {
   return invoke<ScreenshotSettings>("update_screenshot_settings", {
     notificationEnabled,
     saveDir: saveDir !== undefined ? saveDir : null,
+    multiMonitorEnabled: multiMonitorEnabled !== undefined ? multiMonitorEnabled : null,
   });
 }
 

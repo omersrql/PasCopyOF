@@ -31,6 +31,7 @@ const DEFAULT_SCREENSHOT_SHORTCUT: &str = "Ctrl+Shift+S";
 const DEFAULT_TIMER_WIDGET_SHORTCUT: &str = "Ctrl+Shift+T";
 const DEFAULT_TASKS_SHORTCUT: &str = "Ctrl+Shift+P";
 const DEFAULT_QUICK_TASK_SHORTCUT: &str = "Ctrl+Shift+N";
+const DEFAULT_COMPLETE_TASK_SHORTCUT: &str = "Ctrl+Shift+D";
 const DEFAULT_IDLE_TIMEOUT_MINUTES: u64 = 15;
 const DEFAULT_CLIPBOARD_PAGE_SIZE: u32 = 50;
 const VERIFY_MESSAGE: &str = "pascopyof-verify-ok";
@@ -48,7 +49,9 @@ pub struct AppState {
     pub timer_widget_shortcut: String,
     pub tasks_shortcut: String,
     pub quick_task_shortcut: String,
+    pub complete_task_shortcut: String,
     pub screenshot_notification_enabled: bool,
+    pub screenshot_multi_monitor_enabled: bool,
     pub screenshot_save_dir: String,
     pub default_screenshot_save_dir: String,
     pub clipboard_page_size: u32,
@@ -115,6 +118,7 @@ pub struct ScreenshotSettings {
     pub notification_enabled: bool,
     pub save_dir: String,
     pub default_save_dir: String,
+    pub multi_monitor_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -905,29 +909,71 @@ fn trigger_screenshot_capture(app: &AppHandle) -> Result<(), String> {
         return Err("No monitors found".into());
     }
 
-    let cursor = get_screen_cursor_pos()
-        .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
+    let is_multi_monitor = {
+        let state = app.state::<SafeAppState>();
+        state.0.lock().map(|st| st.screenshot_multi_monitor_enabled).unwrap_or(false)
+    };
 
-    let target_monitor = if let Some((cx, cy)) = cursor {
-        xcap::Monitor::from_point(cx, cy).ok()
-            .or_else(|| monitors.iter().find(|m| m.is_primary().unwrap_or(false)).cloned())
-            .or_else(|| monitors.first().cloned())
+    let (captured_img, mon_x, mon_y, mon_w, mon_h) = if is_multi_monitor && monitors.len() > 1 {
+        let mut min_x = i32::MAX;
+        let mut min_y = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut max_y = i32::MIN;
+
+        for m in &monitors {
+            let x = m.x().unwrap_or(0);
+            let y = m.y().unwrap_or(0);
+            let w = m.width().unwrap_or(0) as i32;
+            let h = m.height().unwrap_or(0) as i32;
+
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x + w);
+            max_y = max_y.max(y + h);
+        }
+
+        let total_w = (max_x - min_x).max(1) as u32;
+        let total_h = (max_y - min_y).max(1) as u32;
+        let mut combined = image::RgbaImage::new(total_w, total_h);
+
+        for m in &monitors {
+            if let Ok(img) = m.capture_image() {
+                let mx = m.x().unwrap_or(0);
+                let my = m.y().unwrap_or(0);
+                let dest_x = (mx - min_x) as i64;
+                let dest_y = (my - min_y) as i64;
+                image::imageops::overlay(&mut combined, &img, dest_x, dest_y);
+            }
+        }
+
+        (combined, min_x, min_y, total_w, total_h)
     } else {
-        monitors.iter().find(|m| m.is_primary().unwrap_or(false)).cloned()
-            .or_else(|| monitors.first().cloned())
-    }.ok_or("No valid monitor found")?;
+        let cursor = get_screen_cursor_pos()
+            .or_else(|| app.cursor_position().ok().map(|p| (p.x as i32, p.y as i32)));
 
-    let mon_x = target_monitor.x().map_err(|e| e.to_string())?;
-    let mon_y = target_monitor.y().map_err(|e| e.to_string())?;
-    let mon_w = target_monitor.width().map_err(|e| e.to_string())?;
-    let mon_h = target_monitor.height().map_err(|e| e.to_string())?;
+        let target_monitor = if let Some((cx, cy)) = cursor {
+            xcap::Monitor::from_point(cx, cy).ok()
+                .or_else(|| monitors.iter().find(|m| m.is_primary().unwrap_or(false)).cloned())
+                .or_else(|| monitors.first().cloned())
+        } else {
+            monitors.iter().find(|m| m.is_primary().unwrap_or(false)).cloned()
+                .or_else(|| monitors.first().cloned())
+        }.ok_or("No valid monitor found")?;
 
-    let captured = target_monitor.capture_image().map_err(|e| format!("Failed to capture screen: {e}"))?;
-    let img_w = captured.width();
-    let img_h = captured.height();
+        let mx = target_monitor.x().map_err(|e| e.to_string())?;
+        let my = target_monitor.y().map_err(|e| e.to_string())?;
+        let mw = target_monitor.width().map_err(|e| e.to_string())?;
+        let mh = target_monitor.height().map_err(|e| e.to_string())?;
+
+        let img = target_monitor.capture_image().map_err(|e| format!("Failed to capture screen: {e}"))?;
+        (img, mx, my, mw, mh)
+    };
+
+    let img_w = captured_img.width();
+    let img_h = captured_img.height();
 
     let mut buf = std::io::Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(captured)
+    image::DynamicImage::ImageRgba8(captured_img)
         .write_to(&mut buf, image::ImageFormat::Png)
         .map_err(|e| format!("Failed to encode image: {e}"))?;
     let b64 = B64.encode(buf.into_inner());
@@ -939,6 +985,7 @@ fn trigger_screenshot_capture(app: &AppHandle) -> Result<(), String> {
         let _ = window.set_size(size);
         let _ = window.show();
         let _ = window.set_position(pos);
+        let _ = window.set_size(size);
         let _ = window.set_focus();
 
         let _ = window.emit("screenshot-captured", serde_json::json!({
@@ -3342,6 +3389,7 @@ async fn get_screenshot_settings(
         notification_enabled: st.screenshot_notification_enabled,
         save_dir: st.screenshot_save_dir.clone(),
         default_save_dir: st.default_screenshot_save_dir.clone(),
+        multi_monitor_enabled: st.screenshot_multi_monitor_enabled,
     })
 }
 
@@ -3349,10 +3397,14 @@ async fn get_screenshot_settings(
 async fn update_screenshot_settings(
     notification_enabled: bool,
     save_dir: Option<String>,
+    multi_monitor_enabled: Option<bool>,
     state: State<'_, SafeAppState>,
 ) -> Result<ScreenshotSettings, String> {
     let mut st = state.0.lock().map_err(|e| e.to_string())?;
     st.screenshot_notification_enabled = notification_enabled;
+    if let Some(mm) = multi_monitor_enabled {
+        st.screenshot_multi_monitor_enabled = mm;
+    }
     if let Some(dir) = save_dir {
         let trimmed = dir.trim();
         let next_dir = if trimmed.is_empty() {
@@ -3370,6 +3422,12 @@ async fn update_screenshot_settings(
         if notification_enabled { "1" } else { "0" },
     )
     .map_err(|e| e.to_string())?;
+    set_meta(
+        &conn,
+        "screenshot_multi_monitor_enabled",
+        if st.screenshot_multi_monitor_enabled { "1" } else { "0" },
+    )
+    .map_err(|e| e.to_string())?;
     set_meta(&conn, "screenshot_save_dir", &st.screenshot_save_dir)
         .map_err(|e| e.to_string())?;
 
@@ -3378,6 +3436,7 @@ async fn update_screenshot_settings(
         notification_enabled: st.screenshot_notification_enabled,
         save_dir: st.screenshot_save_dir.clone(),
         default_save_dir: st.default_screenshot_save_dir.clone(),
+        multi_monitor_enabled: st.screenshot_multi_monitor_enabled,
     })
 }
 
@@ -3968,11 +4027,8 @@ async fn toggle_timer_widget(app: AppHandle) -> Result<(), String> {
     toggle_timer_widget_internal(&app)
 }
 
-#[tauri::command]
-async fn complete_active_task(
-    app: AppHandle,
-    state: State<'_, SafeAppState>,
-) -> Result<Option<TaskItem>, String> {
+fn complete_active_task_internal(app: &AppHandle) -> Result<Option<TaskItem>, String> {
+    let state = app.state::<SafeAppState>();
     let task_opt = {
         let mut st = state.0.lock().map_err(|e| e.to_string())?;
         let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
@@ -4014,9 +4070,86 @@ async fn complete_active_task(
         if let Some(w) = app.get_webview_window("timer-widget") {
             let _ = w.hide();
         }
+        use tauri_plugin_notification::NotificationExt;
+        let _ = app
+            .notification()
+            .builder()
+            .title("PasCopyOf")
+            .body(format!("✓ \"{}\" görevi tamamlandı.", task.title))
+            .show();
     }
 
     Ok(task_opt)
+}
+
+#[tauri::command]
+async fn complete_active_task(
+    app: AppHandle,
+) -> Result<Option<TaskItem>, String> {
+    complete_active_task_internal(&app)
+}
+
+fn register_complete_task_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut: Shortcut = shortcut_str
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = complete_active_task_internal(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_complete_task_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.complete_task_shortcut.clone())
+}
+
+#[tauri::command]
+async fn set_complete_task_shortcut(
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+    shortcut: String,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let new_sc: Shortcut = shortcut
+        .parse()
+        .map_err(|e| format!("Geçersiz kısayol: {e}"))?;
+    let old_sc_str = {
+        let mut st = state.0.lock().map_err(|e| e.to_string())?;
+        let old = st.complete_task_shortcut.clone();
+        st.complete_task_shortcut = shortcut.clone();
+        old
+    };
+
+    if let Ok(old_sc) = old_sc_str.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old_sc);
+    }
+
+    let app_handle = app.clone();
+    app.global_shortcut()
+        .on_shortcut(new_sc, move |_app, _shortcut, event| {
+            if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                let _ = complete_active_task_internal(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "complete_task_shortcut", &shortcut).map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -4696,9 +4829,14 @@ pub fn run() {
                 .unwrap_or_else(|| DEFAULT_TASKS_SHORTCUT.to_string());
             let quick_task_shortcut = get_meta(&conn, "quick_task_shortcut")
                 .unwrap_or_else(|| DEFAULT_QUICK_TASK_SHORTCUT.to_string());
+            let complete_task_shortcut = get_meta(&conn, "complete_task_shortcut")
+                .unwrap_or_else(|| DEFAULT_COMPLETE_TASK_SHORTCUT.to_string());
             let screenshot_notification_enabled = get_meta(&conn, "screenshot_notification_enabled")
                 .map(|v| v != "0")
                 .unwrap_or(true);
+            let screenshot_multi_monitor_enabled = get_meta(&conn, "screenshot_multi_monitor_enabled")
+                .map(|v| v == "1")
+                .unwrap_or(false);
             let default_screenshot_save_dir = get_default_screenshot_dir(app.handle())
                 .to_string_lossy()
                 .to_string();
@@ -4752,7 +4890,9 @@ pub fn run() {
                 timer_widget_shortcut: timer_widget_shortcut.clone(),
                 tasks_shortcut: tasks_shortcut.clone(),
                 quick_task_shortcut: quick_task_shortcut.clone(),
+                complete_task_shortcut: complete_task_shortcut.clone(),
                 screenshot_notification_enabled,
+                screenshot_multi_monitor_enabled,
                 screenshot_save_dir,
                 default_screenshot_save_dir,
                 clipboard_page_size,
@@ -4798,6 +4938,9 @@ pub fn run() {
             }
             if let Err(e) = register_quick_task_hotkey(app.handle(), &quick_task_shortcut) {
                 eprintln!("Failed to register quick task hotkey: {e}");
+            }
+            if let Err(e) = register_complete_task_hotkey(app.handle(), &complete_task_shortcut) {
+                eprintln!("Failed to register complete task hotkey: {e}");
             }
 
             // Start clipboard watcher background thread
@@ -5030,6 +5173,8 @@ pub fn run() {
             toggle_quick_task,
             get_quick_task_shortcut,
             set_quick_task_shortcut,
+            get_complete_task_shortcut,
+            set_complete_task_shortcut,
             save_recovery_key_file,
             restart_app,
         ])
