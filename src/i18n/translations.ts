@@ -319,6 +319,9 @@ export const translations = {
     snipToolStep: "Adım Numarası (S)",
     snipToolOcr: "Metin Ayıkla (OCR)",
     snipToolMockup: "Sunum / Kart Modu (M)",
+    snipToolColorPicker: "Renk Bulucu / Mercek (L)",
+    snipColorPickerActive: "Renk Bulucu (Açık)",
+    snipColorPickerInactive: "Renk Bulucu",
     snipToolCopy: "Kopyala & Kapat (Ctrl+C / Enter)",
     snipToolSave: "Kaydet (Ctrl+S)",
 
@@ -779,6 +782,9 @@ export const translations = {
     snipToolStep: "Step Counter (S)",
     snipToolOcr: "Extract Text (OCR)",
     snipToolMockup: "Presentation Mode (M)",
+    snipToolColorPicker: "Color Picker / Loupe (L)",
+    snipColorPickerActive: "Color Picker (On)",
+    snipColorPickerInactive: "Color Picker",
     snipToolCopy: "Copy & Close (Ctrl+C / Enter)",
     snipToolSave: "Save (Ctrl+S)",
 

@@ -140,7 +140,7 @@ export default function ScreenshotOverlayPage() {
   const [isOcrRunning, setIsOcrRunning] = useState(false);
   const [ocrResultText, setOcrResultText] = useState<string | null>(null);
   const [mockupMode, setMockupMode] = useState<boolean>(false);
-  const [showMagnifier, setShowMagnifier] = useState<boolean>(true); // Default open
+  const [showMagnifier, setShowMagnifier] = useState<boolean>(false); // Default off - optional tool
   const [mousePos, setMousePos] = useState<{
     canvasX: number;
     canvasY: number;
@@ -180,7 +180,7 @@ export default function ScreenshotOverlayPage() {
         setTextInput(null);
         setActiveTool("crop");
         setMockupMode(false);
-        setShowMagnifier(true);
+        setShowMagnifier(false);
         setOcrResultText(null);
       };
       img.src = image;
@@ -1392,6 +1392,19 @@ export default function ScreenshotOverlayPage() {
           <div className="crop-banner-actions">
             <button
               type="button"
+              className={`crop-banner-btn color-picker ${showMagnifier ? "active" : ""}`}
+              title={showMagnifier ? `${t("snipToolColorPicker")} (${t("close")})` : t("snipToolColorPicker")}
+              onClick={() => setShowMagnifier((prev) => !prev)}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
+                <path d="m5 2 5 5" />
+                <circle cx="19" cy="19" r="2" />
+              </svg>
+              <span>{showMagnifier ? t("snipColorPickerActive") : t("snipColorPickerInactive")}</span>
+            </button>
+            <button
+              type="button"
               className="crop-banner-btn primary"
               onClick={() => {
                 setSelection({ x: 0, y: 0, w: imgSize.w, h: imgSize.h });
@@ -1581,18 +1594,17 @@ export default function ScreenshotOverlayPage() {
 
           <div className="toolbar-divider" />
 
-          {/* Tool: Magnifier / Mercek Toggle */}
+          {/* Tool: Magnifier / Renk Bulucu & Mercek Toggle */}
           <button
             type="button"
             className={`toolbar-btn ${showMagnifier ? "active" : ""}`}
-            title={showMagnifier ? "Mercek / Büyüteç Açık (Kapat: L)" : "Mercek / Büyüteç Kapalı (Aç: L)"}
+            title={showMagnifier ? `${t("snipToolColorPicker")} (${t("close")})` : t("snipToolColorPicker")}
             onClick={() => setShowMagnifier((prev) => !prev)}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="11" y1="8" x2="11" y2="14" />
-              <line x1="8" y1="11" x2="14" y2="11" />
+              <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
+              <path d="m5 2 5 5" />
+              <circle cx="19" cy="19" r="2" />
             </svg>
           </button>
 
