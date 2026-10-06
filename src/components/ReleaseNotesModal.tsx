@@ -47,9 +47,110 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
 
   const releases: ReleaseItem[] = [
     {
+      version: "v0.3.2",
+      date: isTr ? "6 Ekim 2026" : "October 6, 2026",
+      isLatest: true,
+      tagline: {
+        tr: "🖥️ Çoklu Monitör Ekran Alıntısı, Görev Kısayolları ve Gelişmiş Pano Izgarası",
+        en: "🖥️ Multi-Monitor Screenshot, Task Hotkeys & Advanced Clipboard Grid",
+      },
+      features: [
+        {
+          icon: "🖥️",
+          tag: { tr: "Yeni Özellik", en: "New Feature" },
+          tagType: "new",
+          title: {
+            tr: "Çoklu Monitör Ekran Alıntısı (Parametrik)",
+            en: "Parametric Multi-Monitor Screenshot Capture",
+          },
+          desc: {
+            tr: "Ayarlar > Ekran Alıntısı sekmesinden tek tıkla 'Aktif Monitör' veya 'Tüm Monitörler (Birleşik Sanal Masaüstü)' modu seçilebilir. Çoklu monitörlerde tüm ekranlar tek bir geniş kanvasta kırpılabilir.",
+            en: "Toggle between active monitor or unified virtual multi-display capture in Settings > Screenshot.",
+          },
+        },
+        {
+          icon: "✓",
+          tag: { tr: "Yeni Kısayol", en: "New Shortcut" },
+          tagType: "new",
+          title: {
+            tr: "Aktif Görevi Tamamlama Kısayolu (Ctrl + Shift + D)",
+            en: "Complete Active Task Shortcut (Ctrl + Shift + D)",
+          },
+          desc: {
+            tr: "Çalışmakta olan aktif görevi veya son görevi anında tamamlandıya çeker, sayacı durdurur, yüzen widget'ı gizler ve Windows bildirimi gösterir.",
+            en: "Instantly mark running task as completed, stop focus timer, and hide floating widget with one global hotkey.",
+          },
+        },
+        {
+          icon: "📋",
+          tag: { tr: "İyileştirme", en: "Improvement" },
+          tagType: "improvement",
+          title: {
+            tr: "Tam Ekran Pano Geçmişi Yatay Izgara (1-2-3 Sıralama)",
+            en: "Horizontal Grid Layout for Fullscreen Clipboard (1-2-3 Order)",
+          },
+          desc: {
+            tr: "Tam ekran pano görünümünde öğeler artık dikey sütun yerine soldan sağa yatay ızgara (1, 2, 3...) düzeninde listelenir. Tüm arayüz ölçeklerinde tutarlı ızgara görünümü sağlandı.",
+            en: "Clipboard items in fullscreen now flow seamlessly in horizontal rows (left-to-right) across all scale factors.",
+          },
+        },
+        {
+          icon: "⌨️",
+          tag: { tr: "Düzeltme", en: "Fix" },
+          tagType: "fix",
+          title: {
+            tr: "Shift + Print Screen Kısayol Desteği & Windows Düzeltmesi",
+            en: "Shift + Print Screen & Standalone PrintScreen Support",
+          },
+          desc: {
+            tr: "Windows Chromium'un PrintScreen tuşunda keydown olayını yutma sorunu giderildi. Artık Shift + PrintScreen veya PrintScreen kısayolları doğrudan ayarlanabilir.",
+            en: "Fixed Windows Chromium issue swallowing PrintScreen keydown; Shift + PrintScreen and PrintScreen can now be cleanly registered.",
+          },
+        },
+        {
+          icon: "🧭",
+          tag: { tr: "Akıllı Arayüz", en: "Smart UI" },
+          tagType: "improvement",
+          title: {
+            tr: "Akıllı Dinamik Önizleme Konumlandırması",
+            en: "Smart Dynamic Preview Popover Positioning",
+          },
+          desc: {
+            tr: "Pano geçmişi ekranın sağ kenarına yakın açıldığında detay popover'ı otomatik olarak sol tarafa yerleşir; ekran taşmaları tamamen engellendi.",
+            en: "Popover automatically opens on the left when insufficient space is available on the right side of the screen.",
+          },
+        },
+        {
+          icon: "🛡️",
+          tag: { tr: "Düzeltme", en: "Fix" },
+          tagType: "fix",
+          title: {
+            tr: "Tekrarlayan (Duplicate) Pano Kayıtlarının Engellenmesi",
+            en: "Duplicate Clipboard History Prevention",
+          },
+          desc: {
+            tr: "Aynı metin veya öğe kopyalandığında listede çift kayıt oluşturulması engellendi, mevcut kayıt en başa taşınacak şekilde optimize edildi.",
+            en: "Prevents duplicate items when copying same text repeatedly, updating existing entry timestamp instead.",
+          },
+        },
+        {
+          icon: "🔢",
+          tag: { tr: "Düzeltme", en: "Fix" },
+          tagType: "fix",
+          title: {
+            tr: "Ayarlar Paneli Kısayol Sayacı Rozeti (7 Adet)",
+            en: "Settings Hotkeys Badge Count Corrected (7 Items)",
+          },
+          desc: {
+            tr: "Ayarlar menüsündeki Kısayol Tuşları rozet sayısı yeni eklenen Görevi Tamamla kısayolu ile uyumlu olarak 7'ye güncellendi.",
+            en: "Updated hotkeys tab badge count to accurately reflect all 7 configurable global shortcuts.",
+          },
+        },
+      ],
+    },
+    {
       version: "v0.3.0",
       date: isTr ? "1 Ekim 2026" : "October 1, 2026",
-      isLatest: true,
       tagline: {
         tr: "🛡️ Acil Durum Kurtarma, Görev Sayacı, Canlı Otomatik Güncelleme ve Dahili Kılavuz",
         en: "🛡️ Emergency Recovery, Task Tracker, Live Auto-Updater & In-App Guide",
