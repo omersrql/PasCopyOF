@@ -199,7 +199,7 @@ export default function ManagerPage() {
   const [recordingCompleteTaskShortcut, setRecordingCompleteTaskShortcut] = useState(false);
 
   // Software Updates State
-  const [appVersion, setAppVersion] = useState("0.3.1");
+  const [appVersion, setAppVersion] = useState("0.3.2");
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
