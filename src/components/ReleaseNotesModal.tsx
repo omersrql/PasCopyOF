@@ -47,12 +47,12 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
 
   const releases: ReleaseItem[] = [
     {
-      version: "v0.3.3",
+      version: "v0.3.4",
       date: isTr ? "6 Ekim 2026" : "October 6, 2026",
       isLatest: true,
       tagline: {
-        tr: "⚡ Yüksek Performanslı Pano, Çoklu Monitör Ekran Alıntısı & Parametrik Akış",
-        en: "⚡ High-Performance Clipboard, Multi-Monitor Screenshot & Parametric Flow",
+        tr: "🖱️ Sağ Tık Hızlı Menü, Yüksek Performanslı Pano & Çoklu Monitör",
+        en: "🖱️ Right-Click Quick Menu, High-Performance Clipboard & Multi-Monitor",
       },
       features: [
         {

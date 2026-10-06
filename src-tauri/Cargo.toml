@@ -1,6 +1,6 @@
 [package]
 name = "pascopyof"
-version = "0.3.3"
+version = "0.3.4"
 description = "PasCopyOf - A lightweight password vault launcher for system administrators"
 authors = ["you"]
 edition = "2021"
