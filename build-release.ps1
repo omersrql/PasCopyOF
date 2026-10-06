@@ -45,8 +45,9 @@ $latestJsonContent = @"
   }
 }
 "@
-Set-Content -Path "$releaseDir\latest.json" -Value $latestJsonContent -Encoding UTF8
-Set-Content -Path "$nsisDir\latest.json" -Value $latestJsonContent -Encoding UTF8
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText("$releaseDir\latest.json", $latestJsonContent, $utf8NoBom)
+[System.IO.File]::WriteAllText("$nsisDir\latest.json", $latestJsonContent, $utf8NoBom)
 
 Write-Host ">>> Basariyla tamamlandi! Ciktilar '$releaseDir' klasorunde hazir." -ForegroundColor Green
 explorer.exe $releaseDir
