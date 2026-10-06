@@ -1817,6 +1817,16 @@ select.form-input option:hover,
   opacity: 1;
 }
 
+.clip-pinned-indicator {
+  font-size: 13px;
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  user-select: none;
+}
+
 .clip-action-btn {
   background: transparent;
   border: none;
@@ -1833,8 +1843,13 @@ select.form-input option:hover,
 }
 
 .clip-action-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+}
+
+.clip-action-btn.menu-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #38bdf8;
 }
 
 .clip-action-btn.pin.active {
@@ -1844,6 +1859,82 @@ select.form-input option:hover,
 .clip-action-btn.delete:hover {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+/* Custom Context Menu */
+.clip-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 205px;
+  background: rgba(22, 24, 34, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: clipMenuFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes clipMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.clip-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  text-align: left;
+}
+
+.clip-context-menu-item:hover {
+  background: rgba(14, 165, 233, 0.2);
+  color: #ffffff;
+}
+
+.clip-context-menu-item.delete:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+}
+
+.clip-context-label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.clip-context-shortcut {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.clip-context-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 3px 4px;
 }
 
 .clip-copied-toast {

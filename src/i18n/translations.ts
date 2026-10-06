@@ -450,6 +450,12 @@ export const translations = {
     clipEmptyContent: "(Boş içerik)",
     clipCharsLabel: "karakter",
     clipFilesLabel: "dosya",
+    clipMenuCopy: "Kopyala",
+    clipMenuPin: "Sık Kullanılanlara Ekle",
+    clipMenuUnpin: "Sabitlemeyi Kaldır",
+    clipMenuVault: "Kasaya Kaydet",
+    clipMenuDelete: "Geçmişten Sil",
+    clipOptionsTooltip: "Seçenekler",
 
     // Update Prompt Modal & Auto-Check
     updatePromptTitle: "Yeni Sürüm Yayınlandı!",
@@ -926,6 +932,12 @@ export const translations = {
     clipEmptyContent: "(Empty content)",
     clipCharsLabel: "chars",
     clipFilesLabel: "files",
+    clipMenuCopy: "Copy",
+    clipMenuPin: "Add to Favorites (Pin)",
+    clipMenuUnpin: "Remove from Favorites (Unpin)",
+    clipMenuVault: "Save to Vault",
+    clipMenuDelete: "Delete from History",
+    clipOptionsTooltip: "Options",
 
     // Update Prompt Modal & Auto-Check
     updatePromptTitle: "New Version Available!",

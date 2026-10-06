@@ -56,6 +56,19 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
       },
       features: [
         {
+          icon: "🖱️",
+          tag: { tr: "Yeni Arayüz", en: "New UI" },
+          tagType: "improvement",
+          title: {
+            tr: "Sadeleştirilmiş Pano Kartları & Sağ Tık / Hızlı Menü (⋮)",
+            en: "Streamlined Clipboard Cards & Right-Click / Quick Menu (⋮)",
+          },
+          desc: {
+            tr: "Pano kartlarındaki kalabalık butonlar, sıra numaraları ve karakter sayıları kaldırılarak kopyalanan içeriğe maksimum görünürlük sağlandı. Kopyalama, sık kullanılanlara ekleme, kasaya kaydetme ve silme işlemleri sağ tık ve kart üzerindeki '⋮' menüsüne toplandı.",
+            en: "Maximum content visibility with removed inline clutter, sequence numbers, and character counts. Copy, pin, save to vault, and delete actions are seamlessly accessible via Right-Click and '⋮' kebab menu.",
+          },
+        },
+        {
           icon: "⚡",
           tag: { tr: "Performans", en: "Performance" },
           tagType: "improvement",

@@ -29,11 +29,8 @@ interface ClipboardItemCardProps {
   onCopy: (id: number) => void;
   onMouseEnter: (item: ClipboardItem, idx: number) => void;
   onMouseLeave: () => void;
-  onOpenSaveToVault: (e: React.MouseEvent, item: ClipboardItem) => void;
-  onTogglePin: (e: React.MouseEvent, id: number) => void;
-  onDelete: (e: React.MouseEvent, id: number) => void;
+  onOpenMenu: (e: React.MouseEvent, item: ClipboardItem) => void;
   formatTime: (timeStr: string) => string;
-  saveToVaultHint: string;
 }
 
 const ClipboardItemCard = React.memo(function ClipboardItemCard({
@@ -44,11 +41,8 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
   onCopy,
   onMouseEnter,
   onMouseLeave,
-  onOpenSaveToVault,
-  onTogglePin,
-  onDelete,
+  onOpenMenu,
   formatTime,
-  saveToVaultHint,
 }: ClipboardItemCardProps) {
   const { t } = useApp();
   return (
@@ -58,14 +52,10 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
         item.isPinned ? "pinned" : ""
       }`}
       onClick={() => onCopy(item.id)}
+      onContextMenu={(e) => onOpenMenu(e, item)}
       onMouseEnter={() => onMouseEnter(item, idx)}
       onMouseLeave={onMouseLeave}
     >
-      {/* Index Badge */}
-      <span className="clip-item-index" title={`#${idx + 1}`}>
-        #{idx + 1}
-      </span>
-
       {/* Left Type Icon / Thumbnail */}
       <div className="clip-item-left">
         {item.contentType === "image" && item.imageData ? (
@@ -108,7 +98,7 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
         )}
       </div>
 
-      {/* Middle Content */}
+      {/* Middle Content - Maximized room for preview */}
       <div className="clip-item-body">
         <div className="clip-item-preview">
           {item.preview || t("clipEmptyContent")}
@@ -117,11 +107,6 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
           <span className="clip-meta-time">
             {formatTime(item.copiedAt)}
           </span>
-          {item.charCount ? (
-            <span className="clip-meta-badge">
-              {item.charCount} {t("clipCharsLabel")}
-            </span>
-          ) : null}
           {item.fileCount ? (
             <span className="clip-meta-badge">
               {item.fileCount} {t("clipFilesLabel")}
@@ -130,30 +115,26 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
         </div>
       </div>
 
-      {/* Right Actions */}
+      {/* Right Actions / Quick Menu */}
       <div className="clip-item-actions">
-        {(item.contentType === "text" || item.textContent) && (
-          <button
-            className="clip-action-btn vault-save"
-            title={saveToVaultHint}
-            onClick={(e) => onOpenSaveToVault(e, item)}
-          >
-            🔒
-          </button>
+        {item.isPinned && (
+          <span className="clip-pinned-indicator" title={t("clipUnpinTooltip") || "Sabitlendi"}>
+            ★
+          </span>
         )}
         <button
-          className={`clip-action-btn pin ${item.isPinned ? "active" : ""}`}
-          title={item.isPinned ? t("clipUnpinTooltip") : t("clipPinTooltip")}
-          onClick={(e) => onTogglePin(e, item.id)}
+          className="clip-action-btn menu-btn"
+          title={t("clipOptionsTooltip") || "Seçenekler"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenMenu(e, item);
+          }}
         >
-          ★
-        </button>
-        <button
-          className="clip-action-btn delete"
-          title={t("clipDeleteTooltip")}
-          onClick={(e) => onDelete(e, item.id)}
-        >
-          ✕
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <circle cx="12" cy="5" r="2.2" />
+            <circle cx="12" cy="12" r="2.2" />
+            <circle cx="12" cy="19" r="2.2" />
+          </svg>
         </button>
       </div>
 
@@ -163,6 +144,12 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
     </div>
   );
 });
+
+interface ContextMenuState {
+  item: ClipboardItem;
+  x: number;
+  y: number;
+}
 
 export default function ClipboardLauncherPage() {
   const { t, lang } = useApp();
@@ -175,6 +162,7 @@ export default function ClipboardLauncherPage() {
   const [hoverPreviewItem, setHoverPreviewItem] = useState<ClipboardItem | null>(null);
   const [fullPreviewImage, setFullPreviewImage] = useState<string | null>(null);
   const [saveToVaultItem, setSaveToVaultItem] = useState<ClipboardItem | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [previewDelayMs, setPreviewDelayMs] = useState(2000);
   const [windowMode, setWindowMode] = useState<"popup" | "fullscreen">("popup");
   const [closeOnBlur, setCloseOnBlur] = useState<boolean>(true);
@@ -186,6 +174,8 @@ export default function ClipboardLauncherPage() {
   const [columnCount, setColumnCount] = useState<number>(3);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("right");
 
+  const contextMenuRef = useRef(contextMenu);
+  contextMenuRef.current = contextMenu;
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;
   const gridFlowRef = useRef(gridFlow);
@@ -224,6 +214,33 @@ export default function ClipboardLauncherPage() {
       }
     }
   }, []);
+
+  const handleOpenMenu = useCallback((e: React.MouseEvent, item: ClipboardItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHoverPreviewItem(null);
+
+    const menuW = 210;
+    const menuH = 175;
+    let x = e.clientX;
+    let y = e.clientY;
+
+    if (x + menuW > window.innerWidth - 12) {
+      x = Math.max(12, window.innerWidth - menuW - 12);
+    }
+    if (y + menuH > window.innerHeight - 12) {
+      y = Math.max(12, window.innerHeight - menuH - 12);
+    }
+
+    setContextMenu({ item, x, y });
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleCloseMenu = () => setContextMenu(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, [contextMenu]);
 
   const { toasts, showToast, removeToast } = useToast();
 
@@ -294,6 +311,7 @@ export default function ClipboardLauncherPage() {
       } else {
         setHoverPreviewItem(null);
         setSaveToVaultItem(null);
+        setContextMenu(null);
         if (closeOnBlurRef.current) {
           hideClipboardLauncher();
         }
@@ -393,6 +411,7 @@ export default function ClipboardLauncherPage() {
     const val = e.target.value;
     setQuery(val);
     setHoverPreviewItem(null);
+    setContextMenu(null);
 
     // Instant local filter for 0ms perceptible delay
     const qLower = val.trim().toLowerCase();
@@ -419,6 +438,7 @@ export default function ClipboardLauncherPage() {
   const handleFilterChange = (f: ClipboardFilterType) => {
     setFilterType(f);
     setHoverPreviewItem(null);
+    setContextMenu(null);
     fetchItems(query, f);
   };
 
@@ -486,6 +506,14 @@ export default function ClipboardLauncherPage() {
       // If modal is open, let modal handle keyboard events
       if (saveToVaultItemRef.current !== null) {
         return;
+      }
+
+      if (contextMenuRef.current !== null) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setContextMenu(null);
+          return;
+        }
       }
 
       if (e.key === "Escape") {
@@ -786,11 +814,8 @@ export default function ClipboardLauncherPage() {
                     onCopy={handleCopy}
                     onMouseEnter={handleItemMouseEnter}
                     onMouseLeave={handleItemMouseLeave}
-                    onOpenSaveToVault={handleOpenSaveToVault}
-                    onTogglePin={handleTogglePin}
-                    onDelete={handleDelete}
+                    onOpenMenu={handleOpenMenu}
                     formatTime={formatTime}
-                    saveToVaultHint={t("clipSaveToVaultHint")}
                   />
                 ))}
               </div>
@@ -821,11 +846,8 @@ export default function ClipboardLauncherPage() {
                   onCopy={handleCopy}
                   onMouseEnter={handleItemMouseEnter}
                   onMouseLeave={handleItemMouseLeave}
-                  onOpenSaveToVault={handleOpenSaveToVault}
-                  onTogglePin={handleTogglePin}
-                  onDelete={handleDelete}
+                  onOpenMenu={handleOpenMenu}
                   formatTime={formatTime}
-                  saveToVaultHint={t("clipSaveToVaultHint")}
                 />
               ))
             )}
@@ -966,6 +988,78 @@ export default function ClipboardLauncherPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Context Menu Dropdown */}
+      {contextMenu && (
+        <div
+          className="clip-context-menu"
+          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="clip-context-menu-item"
+            onClick={() => {
+              handleCopy(contextMenu.item.id);
+              setContextMenu(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span className="clip-context-label">{t("clipMenuCopy") || t("copy")}</span>
+            <span className="clip-context-shortcut">↵</span>
+          </button>
+
+          <button
+            className="clip-context-menu-item"
+            onClick={async (e) => {
+              await handleTogglePin(e, contextMenu.item.id);
+              setContextMenu(null);
+            }}
+          >
+            <span style={{ fontSize: "14px", color: contextMenu.item.isPinned ? "#f59e0b" : "inherit" }}>
+              ★
+            </span>
+            <span className="clip-context-label">
+              {contextMenu.item.isPinned
+                ? (t("clipMenuUnpin") || t("clipUnpinTooltip"))
+                : (t("clipMenuPin") || t("clipPinTooltip"))}
+            </span>
+          </button>
+
+          {(contextMenu.item.contentType === "text" || contextMenu.item.textContent) && (
+            <button
+              className="clip-context-menu-item"
+              onClick={(e) => {
+                handleOpenSaveToVault(e, contextMenu.item);
+                setContextMenu(null);
+              }}
+            >
+              <span>🔒</span>
+              <span className="clip-context-label">{t("clipMenuVault") || t("clipSaveToVault")}</span>
+              <span className="clip-context-shortcut">Ctrl+S</span>
+            </button>
+          )}
+
+          <div className="clip-context-menu-divider" />
+
+          <button
+            className="clip-context-menu-item delete"
+            onClick={async (e) => {
+              await handleDelete(e, contextMenu.item.id);
+              setContextMenu(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            <span className="clip-context-label">{t("clipMenuDelete") || t("delete")}</span>
+            <span className="clip-context-shortcut">Del</span>
+          </button>
         </div>
       )}
 
