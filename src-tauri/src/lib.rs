@@ -64,6 +64,7 @@ pub struct AppState {
     pub clipboard_close_on_space: bool,
     pub clipboard_clear_search_on_open: bool,
     pub panel_scale: String,
+    pub clipboard_grid_flow: String,
     pub clipboard_clear_seconds: u64, // 0 = disabled (never clear)
     pub idle_timeout_minutes: u64, // 0 = disabled
     pub last_activity: Instant,
@@ -109,6 +110,7 @@ pub struct ClipboardSettings {
     pub close_on_space: bool,
     pub clear_search_on_open: bool,
     pub panel_scale: String,
+    pub grid_flow: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -2950,6 +2952,7 @@ async fn get_clipboard_settings(
         close_on_space: st.clipboard_close_on_space,
         clear_search_on_open: st.clipboard_clear_search_on_open,
         panel_scale: st.panel_scale.clone(),
+        grid_flow: st.clipboard_grid_flow.clone(),
     })
 }
 
@@ -2965,6 +2968,7 @@ async fn update_clipboard_settings(
     close_on_space: Option<bool>,
     clear_search_on_open: Option<bool>,
     panel_scale: Option<String>,
+    grid_flow: Option<String>,
     app: AppHandle,
     state: State<'_, SafeAppState>,
 ) -> Result<(), String> {
@@ -2991,6 +2995,9 @@ async fn update_clipboard_settings(
     }
     if let Some(ref ps) = panel_scale {
         st.panel_scale = ps.clone();
+    }
+    if let Some(ref gf) = grid_flow {
+        st.clipboard_grid_flow = gf.clone();
     }
 
     let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
@@ -3035,6 +3042,9 @@ async fn update_clipboard_settings(
     }
     if let Some(ref ps) = panel_scale {
         set_meta(&conn, "panel_scale", ps).map_err(|e| e.to_string())?;
+    }
+    if let Some(ref gf) = grid_flow {
+        set_meta(&conn, "clipboard_grid_flow", gf).map_err(|e| e.to_string())?;
     }
 
     // Live update window if clipboard-launcher exists
@@ -4872,6 +4882,8 @@ pub fn run() {
                 .unwrap_or(true);
             let panel_scale = get_meta(&conn, "panel_scale")
                 .unwrap_or_else(|| "medium".to_string());
+            let clipboard_grid_flow = get_meta(&conn, "clipboard_grid_flow")
+                .unwrap_or_else(|| "vertical".to_string());
             let clipboard_clear_seconds = get_meta(&conn, "clipboard_clear_seconds")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15);
@@ -4905,6 +4917,7 @@ pub fn run() {
                 clipboard_close_on_space,
                 clipboard_clear_search_on_open,
                 panel_scale,
+                clipboard_grid_flow,
                 clipboard_clear_seconds,
                 idle_timeout_minutes,
                 last_activity: Instant::now(),

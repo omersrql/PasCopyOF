@@ -2,7 +2,7 @@
  * ClipboardLauncherPage.tsx — Spotlight/Raycast-style floating Clipboard History.
  * Enhanced with instant in-memory search, multi-column responsive grid, and linger preview popover.
  */
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -52,6 +52,7 @@ const ClipboardItemCard = React.memo(function ClipboardItemCard({
   const { t } = useApp();
   return (
     <div
+      data-clip-index={idx}
       className={`clip-item-card ${isSelected ? "selected" : ""} ${
         item.isPinned ? "pinned" : ""
       }`}
@@ -179,7 +180,14 @@ export default function ClipboardLauncherPage() {
   const [clearSearchOnOpen, setClearSearchOnOpen] = useState<boolean>(true);
   const [pageSize, setPageSize] = useState<number>(100);
   const [panelScale, setPanelScale] = useState<"small" | "medium" | "large">("medium");
+  const [gridFlow, setGridFlow] = useState<"vertical" | "horizontal">("vertical");
+  const [columnCount, setColumnCount] = useState<number>(3);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("right");
+
+  const columnCountRef = useRef(columnCount);
+  columnCountRef.current = columnCount;
+  const gridFlowRef = useRef(gridFlow);
+  gridFlowRef.current = gridFlow;
 
   const unfilteredItemsRef = useRef<ClipboardItem[]>([]);
   const searchReqIdRef = useRef<number>(0);
@@ -200,14 +208,17 @@ export default function ClipboardLauncherPage() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const updateElementSide = useCallback((targetEl?: HTMLElement | null) => {
+    // In fullscreen mode, preview popover is strictly fixed on the right side
     if (windowModeRef.current === "fullscreen") {
-      if (targetEl) {
-        const rect = targetEl.getBoundingClientRect();
-        if (rect.left + rect.width / 2 > window.innerWidth / 2) {
-          setPreviewSide("left");
-        } else {
-          setPreviewSide("right");
-        }
+      setPreviewSide("right");
+      return;
+    }
+    if (targetEl) {
+      const rect = targetEl.getBoundingClientRect();
+      if (rect.left + rect.width / 2 > window.innerWidth / 2) {
+        setPreviewSide("left");
+      } else {
+        setPreviewSide("right");
       }
     }
   }, []);
@@ -231,6 +242,7 @@ export default function ClipboardLauncherPage() {
           if (typeof s.clearSearchOnOpen === "boolean") setClearSearchOnOpen(s.clearSearchOnOpen);
           if (typeof s.pageSize === "number" && s.pageSize > 0) setPageSize(s.pageSize);
           if (s.panelScale) setPanelScale(s.panelScale);
+          if (s.gridFlow) setGridFlow((s.gridFlow as "vertical" | "horizontal") || "vertical");
         }
       })
       .catch(() => {});
@@ -338,6 +350,41 @@ export default function ClipboardLauncherPage() {
       return () => window.removeEventListener("resize", detectSide);
     }
   }, [windowMode]);
+
+  // Measure column count dynamically for fullscreen mode
+  useEffect(() => {
+    if (!listRef.current) return;
+    const updateCols = () => {
+      if (!listRef.current) return;
+      const width = listRef.current.clientWidth || listRef.current.offsetWidth || 1200;
+      const minColWidth = panelScale === "small" ? 240 : panelScale === "large" ? 320 : 280;
+      const gap = panelScale === "small" ? 10 : panelScale === "large" ? 14 : 12;
+      const computed = Math.max(1, Math.floor((width + gap) / (minColWidth + gap)));
+      setColumnCount(computed);
+    };
+    updateCols();
+    const ro = new ResizeObserver(updateCols);
+    ro.observe(listRef.current);
+    return () => ro.disconnect();
+  }, [panelScale, windowMode]);
+
+  // Group items into columns for vertical top-to-bottom layout
+  const columnGroups: { item: ClipboardItem; originalIndex: number }[][] = useMemo(() => {
+    if (windowMode !== "fullscreen" || gridFlow !== "vertical" || items.length === 0) {
+      return [];
+    }
+    const cols = Math.max(1, columnCount);
+    const itemsPerCol = Math.ceil(items.length / cols);
+    const groups: { item: ClipboardItem; originalIndex: number }[][] = Array.from(
+      { length: cols },
+      () => []
+    );
+    items.forEach((item, index) => {
+      const colIdx = Math.min(cols - 1, Math.floor(index / itemsPerCol));
+      groups[colIdx].push({ item, originalIndex: index });
+    });
+    return groups.filter((g) => g.length > 0);
+  }, [items, columnCount, windowMode, gridFlow]);
 
   // Handle Search Input: Instant in-memory filter + 150ms debounced backend search
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -483,18 +530,36 @@ export default function ClipboardLauncherPage() {
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        const cols = getGridColumnCount();
-        setSelectedIndex((prev) => Math.min(items.length - 1, prev + cols));
+        if (windowModeRef.current === "fullscreen" && gridFlowRef.current === "vertical") {
+          setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+        } else {
+          const cols = getGridColumnCount();
+          setSelectedIndex((prev) => Math.min(items.length - 1, prev + cols));
+        }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        const cols = getGridColumnCount();
-        setSelectedIndex((prev) => Math.max(0, prev - cols));
+        if (windowModeRef.current === "fullscreen" && gridFlowRef.current === "vertical") {
+          setSelectedIndex((prev) => Math.max(0, prev - 1));
+        } else {
+          const cols = getGridColumnCount();
+          setSelectedIndex((prev) => Math.max(0, prev - cols));
+        }
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+        if (windowModeRef.current === "fullscreen" && gridFlowRef.current === "vertical") {
+          const itemsPerCol = Math.ceil(items.length / Math.max(1, columnCountRef.current));
+          setSelectedIndex((prev) => Math.min(items.length - 1, prev + itemsPerCol));
+        } else {
+          setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+        }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(0, prev - 1));
+        if (windowModeRef.current === "fullscreen" && gridFlowRef.current === "vertical") {
+          const itemsPerCol = Math.ceil(items.length / Math.max(1, columnCountRef.current));
+          setSelectedIndex((prev) => Math.max(0, prev - itemsPerCol));
+        } else {
+          setSelectedIndex((prev) => Math.max(0, prev - 1));
+        }
       } else if (e.key === "Enter") {
         e.preventDefault();
         if (items[selectedIndex]) {
@@ -517,7 +582,7 @@ export default function ClipboardLauncherPage() {
   // Scroll selected into view & keyboard linger preview
   useEffect(() => {
     if (listRef.current) {
-      const activeEl = listRef.current.children[selectedIndex] as HTMLElement | undefined;
+      const activeEl = listRef.current.querySelector<HTMLElement>(`[data-clip-index="${selectedIndex}"]`);
       if (activeEl) {
         activeEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
         updateElementSide(activeEl);
@@ -552,7 +617,7 @@ export default function ClipboardLauncherPage() {
   const handleItemMouseEnter = useCallback((item: ClipboardItem, idx: number) => {
     setSelectedIndex(idx);
     if (listRef.current) {
-      const el = listRef.current.children[idx] as HTMLElement | undefined;
+      const el = listRef.current.querySelector<HTMLElement>(`[data-clip-index="${idx}"]`);
       if (el) updateElementSide(el);
     }
 
@@ -616,7 +681,7 @@ export default function ClipboardLauncherPage() {
   return (
     <div
       ref={rootRef}
-      className={`clip-launcher-root ${windowMode === "fullscreen" ? "fullscreen" : "popup"} ${previewSide === "left" ? "preview-left" : "preview-right"}`}
+      className={`clip-launcher-root ${windowMode === "fullscreen" ? "fullscreen preview-right" : `popup ${previewSide === "left" ? "preview-left" : "preview-right"}`}`}
       data-scale={panelScale}
       onClick={handleBackdropClick}
       onMouseLeave={handleRootMouseLeave}
@@ -686,39 +751,65 @@ export default function ClipboardLauncherPage() {
         </div>
 
         {/* List / Grid Content */}
-        <div className="clip-launcher-list" ref={listRef}>
-          {items.length === 0 ? (
-            <div className="clip-empty-state">
-              <div className="clip-empty-icon">📋</div>
-              <div className="clip-empty-title">
-                {loading ? t("loading") : t("clipEmptyTitle")}
+        {windowMode === "fullscreen" && gridFlow === "vertical" && items.length > 0 ? (
+          <div className="clip-launcher-list flow-vertical" ref={listRef}>
+            {columnGroups.map((colGroup, colIdx) => (
+              <div key={colIdx} className="clip-list-column">
+                {colGroup.map(({ item, originalIndex }) => (
+                  <ClipboardItemCard
+                    key={item.id}
+                    item={item}
+                    idx={originalIndex}
+                    isSelected={originalIndex === selectedIndex}
+                    isJustCopied={copiedId === item.id}
+                    onCopy={handleCopy}
+                    onMouseEnter={handleItemMouseEnter}
+                    onMouseLeave={handleItemMouseLeave}
+                    onOpenSaveToVault={handleOpenSaveToVault}
+                    onTogglePin={handleTogglePin}
+                    onDelete={handleDelete}
+                    formatTime={formatTime}
+                    saveToVaultHint={t("clipSaveToVaultHint")}
+                  />
+                ))}
               </div>
-              <div className="clip-empty-sub">
-                {query
-                  ? t("clipEmptyQuery")
-                  : t("clipEmptyNormal")}
+            ))}
+          </div>
+        ) : (
+          <div className="clip-launcher-list" ref={listRef}>
+            {items.length === 0 ? (
+              <div className="clip-empty-state">
+                <div className="clip-empty-icon">📋</div>
+                <div className="clip-empty-title">
+                  {loading ? t("loading") : t("clipEmptyTitle")}
+                </div>
+                <div className="clip-empty-sub">
+                  {query
+                    ? t("clipEmptyQuery")
+                    : t("clipEmptyNormal")}
+                </div>
               </div>
-            </div>
-          ) : (
-            items.map((item, idx) => (
-              <ClipboardItemCard
-                key={item.id}
-                item={item}
-                idx={idx}
-                isSelected={idx === selectedIndex}
-                isJustCopied={copiedId === item.id}
-                onCopy={handleCopy}
-                onMouseEnter={handleItemMouseEnter}
-                onMouseLeave={handleItemMouseLeave}
-                onOpenSaveToVault={handleOpenSaveToVault}
-                onTogglePin={handleTogglePin}
-                onDelete={handleDelete}
-                formatTime={formatTime}
-                saveToVaultHint={t("clipSaveToVaultHint")}
-              />
-            ))
-          )}
-        </div>
+            ) : (
+              items.map((item, idx) => (
+                <ClipboardItemCard
+                  key={item.id}
+                  item={item}
+                  idx={idx}
+                  isSelected={idx === selectedIndex}
+                  isJustCopied={copiedId === item.id}
+                  onCopy={handleCopy}
+                  onMouseEnter={handleItemMouseEnter}
+                  onMouseLeave={handleItemMouseLeave}
+                  onOpenSaveToVault={handleOpenSaveToVault}
+                  onTogglePin={handleTogglePin}
+                  onDelete={handleDelete}
+                  formatTime={formatTime}
+                  saveToVaultHint={t("clipSaveToVaultHint")}
+                />
+              ))
+            )}
+          </div>
+        )}
 
         {/* Footer / Status bar */}
         <div className="clip-launcher-footer">

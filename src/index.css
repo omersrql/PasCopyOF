@@ -1433,7 +1433,7 @@ select.form-input option:hover,
 }
 
 .clip-launcher-root.fullscreen.preview-left {
-  flex-direction: row-reverse;
+  flex-direction: row !important;
 }
 
 @keyframes launcher-backdrop-fade {
@@ -1496,6 +1496,24 @@ select.form-input option:hover,
   padding: 18px 24px;
   overflow-y: auto;
   box-sizing: border-box;
+}
+
+.clip-launcher-root.fullscreen .clip-launcher-list.flow-vertical {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch;
+  gap: 12px;
+  padding: 18px 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.clip-launcher-root.fullscreen .clip-list-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .clip-launcher-root.fullscreen .clip-item-card {
@@ -3725,6 +3743,13 @@ select.form-input option:hover,
   gap: 10px;
   padding: 14px 20px;
 }
+.clip-launcher-root.fullscreen[data-scale="small"] .clip-launcher-list.flow-vertical {
+  gap: 10px;
+  padding: 14px 20px;
+}
+.clip-launcher-root.fullscreen[data-scale="small"] .clip-list-column {
+  gap: 10px;
+}
 .clip-launcher-root.fullscreen[data-scale="small"] .clip-item-card {
   min-height: 52px;
   padding: 8px 14px;
@@ -3799,6 +3824,13 @@ select.form-input option:hover,
   align-content: start;
   gap: 14px;
   padding: 20px 28px;
+}
+.clip-launcher-root.fullscreen[data-scale="large"] .clip-launcher-list.flow-vertical {
+  gap: 14px;
+  padding: 20px 28px;
+}
+.clip-launcher-root.fullscreen[data-scale="large"] .clip-list-column {
+  gap: 14px;
 }
 .clip-launcher-root.fullscreen[data-scale="large"] .clip-item-card {
   min-height: 70px;

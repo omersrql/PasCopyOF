@@ -173,6 +173,7 @@ export default function ManagerPage() {
   const [clipboardCloseOnSpace, setClipboardCloseOnSpace] = useState<boolean>(true);
   const [clipboardClearSearchOnOpen, setClipboardClearSearchOnOpen] = useState<boolean>(true);
   const [panelScale, setPanelScale] = useState<"small" | "medium" | "large">("medium");
+  const [clipboardGridFlow, setClipboardGridFlow] = useState<"vertical" | "horizontal">("vertical");
 
   // Screenshot Settings State
   const [screenshotShortcut, setScreenshotShortcutState] = useState("Ctrl+Shift+S");
@@ -315,6 +316,7 @@ export default function ManagerPage() {
           closeOnSpace: true,
           clearSearchOnOpen: true,
           panelScale: "medium" as const,
+          gridFlow: "vertical" as const,
         })),
         getScreenshotSettings().catch(() => ({
           shortcut: "Ctrl+Shift+S",
@@ -343,6 +345,9 @@ export default function ManagerPage() {
         setClipboardClearSearchOnOpen(clipSettings.clearSearchOnOpen ?? true);
         if (clipSettings.panelScale) {
           setPanelScale((clipSettings.panelScale as "small" | "medium" | "large") || "medium");
+        }
+        if (clipSettings.gridFlow) {
+          setClipboardGridFlow((clipSettings.gridFlow as "vertical" | "horizontal") || "vertical");
         }
       }
       if (scSettings) {
@@ -696,6 +701,7 @@ export default function ManagerPage() {
       closeOnSpace?: boolean;
       clearSearchOnOpen?: boolean;
       panelScale?: "small" | "medium" | "large";
+      gridFlow?: "vertical" | "horizontal";
     }) => {
       const ps = overrides.pageSize ?? clipboardPageSize;
       const lwv = overrides.lockWithVault ?? clipboardLockWithVault;
@@ -707,7 +713,8 @@ export default function ManagerPage() {
       const cos = overrides.closeOnSpace ?? clipboardCloseOnSpace;
       const cso = overrides.clearSearchOnOpen ?? clipboardClearSearchOnOpen;
       const sc = overrides.panelScale ?? panelScale;
-      await updateClipboardSettings(ps, lwv, en, pd, ap, wm, cob, cos, cso, sc);
+      const gf = overrides.gridFlow ?? clipboardGridFlow;
+      await updateClipboardSettings(ps, lwv, en, pd, ap, wm, cob, cos, cso, sc, gf);
     },
     [
       clipboardPageSize,
@@ -720,6 +727,7 @@ export default function ManagerPage() {
       clipboardCloseOnSpace,
       clipboardClearSearchOnOpen,
       panelScale,
+      clipboardGridFlow,
     ]
   );
 
@@ -1730,6 +1738,108 @@ export default function ManagerPage() {
                                 </div>
                                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
                                   Tüm Ekran (Geniş Odak)
+                                </div>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Fullscreen Grid Flow / Ordering */}
+                        <div className="settings-card">
+                          <div className="settings-card-title">
+                            <span>↕️</span>
+                            <span>{t("settingsClipGridFlowTitle")}</span>
+                          </div>
+                          <div className="settings-card-desc">
+                            {t("settingsClipGridFlowHint")}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setClipboardGridFlow("vertical");
+                                try {
+                                  await saveClipboardPrefs({ gridFlow: "vertical" });
+                                  showToast(
+                                    lang === "tr"
+                                      ? "Tam ekran sıralama: Yukarıdan Aşağıya"
+                                      : "Fullscreen order: Top to Bottom",
+                                    "success"
+                                  );
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "10px 14px",
+                                borderRadius: 8,
+                                border: clipboardGridFlow === "vertical"
+                                  ? "2px solid #0ea5e9"
+                                  : "1px solid rgba(255, 255, 255, 0.12)",
+                                background: clipboardGridFlow === "vertical"
+                                  ? "rgba(14, 165, 233, 0.15)"
+                                  : "rgba(255, 255, 255, 0.03)",
+                                color: "#fff",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                transition: "all 0.18s ease",
+                              }}
+                            >
+                              <span style={{ fontSize: 20 }}>⬇️</span>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                  {t("settingsClipGridFlowVertical")}
+                                </div>
+                                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                                  {t("settingsClipGridFlowVerticalDesc")}
+                                </div>
+                              </div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setClipboardGridFlow("horizontal");
+                                try {
+                                  await saveClipboardPrefs({ gridFlow: "horizontal" });
+                                  showToast(
+                                    lang === "tr"
+                                      ? "Tam ekran sıralama: Soldan Sağa (1-2-3)"
+                                      : "Fullscreen order: Left to Right (1-2-3)",
+                                    "success"
+                                  );
+                                } catch (err) {
+                                  showToast(String(err), "error");
+                                }
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "10px 14px",
+                                borderRadius: 8,
+                                border: clipboardGridFlow === "horizontal"
+                                  ? "2px solid #0ea5e9"
+                                  : "1px solid rgba(255, 255, 255, 0.12)",
+                                background: clipboardGridFlow === "horizontal"
+                                  ? "rgba(14, 165, 233, 0.15)"
+                                  : "rgba(255, 255, 255, 0.03)",
+                                color: "#fff",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                transition: "all 0.18s ease",
+                              }}
+                            >
+                              <span style={{ fontSize: 20 }}>➡️</span>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                  {t("settingsClipGridFlowHorizontal")}
+                                </div>
+                                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                                  {t("settingsClipGridFlowHorizontalDesc")}
                                 </div>
                               </div>
                             </button>

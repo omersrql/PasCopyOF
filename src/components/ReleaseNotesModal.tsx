@@ -51,10 +51,36 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
       date: isTr ? "6 Ekim 2026" : "October 6, 2026",
       isLatest: true,
       tagline: {
-        tr: "🖥️ Çoklu Monitör Ekran Alıntısı, Görev Kısayolları ve Gelişmiş Pano Izgarası",
-        en: "🖥️ Multi-Monitor Screenshot, Task Hotkeys & Advanced Clipboard Grid",
+        tr: "🖥️ Çoklu Monitör Ekran Alıntısı, Parametrik Pano Akışı ve Görev Kısayolları",
+        en: "🖥️ Multi-Monitor Screenshot, Parametric Clipboard Flow & Task Hotkeys",
       },
       features: [
+        {
+          icon: "↕️",
+          tag: { tr: "Yeni Özellik", en: "New Feature" },
+          tagType: "new",
+          title: {
+            tr: "Tam Ekran Pano Sıralama Yönü (Parametrik)",
+            en: "Parametric Fullscreen Clipboard Flow (Vertical & Horizontal)",
+          },
+          desc: {
+            tr: "Ayarlar > Pano sekmesinden 'Yukarıdan Aşağıya (Dikey Akış)' veya 'Soldan Sağa (Yatay Akış)' modu seçilebilir. Grid yapısı korunarak kartlar sütunlar boyunca doğal akışta listelenir.",
+            en: "Choose between 'Top to Bottom (Vertical Flow)' or 'Left to Right (Horizontal Flow)' in Settings > Clipboard. Grid structure is preserved with seamless column-wise reading.",
+          },
+        },
+        {
+          icon: "📌",
+          tag: { tr: "İyileştirme", en: "Improvement" },
+          tagType: "improvement",
+          title: {
+            tr: "Tam Ekran Önizleme Penceresi Sağda Sabitleme",
+            en: "Fixed Right-Docked Preview Popover in Fullscreen",
+          },
+          desc: {
+            tr: "Tam ekran pano modunda içerik detay penceresi artık asla sağa-sola zıplamaz; ekranın sağ tarafında kararlı ve sabit bir şekilde konumlanır.",
+            en: "In fullscreen mode, the content preview popover is strictly docked to the right edge and never bounces back and forth.",
+          },
+        },
         {
           icon: "🖥️",
           tag: { tr: "Yeni Özellik", en: "New Feature" },
@@ -82,19 +108,6 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
           },
         },
         {
-          icon: "📋",
-          tag: { tr: "İyileştirme", en: "Improvement" },
-          tagType: "improvement",
-          title: {
-            tr: "Tam Ekran Pano Geçmişi Yatay Izgara (1-2-3 Sıralama)",
-            en: "Horizontal Grid Layout for Fullscreen Clipboard (1-2-3 Order)",
-          },
-          desc: {
-            tr: "Tam ekran pano görünümünde öğeler artık dikey sütun yerine soldan sağa yatay ızgara (1, 2, 3...) düzeninde listelenir. Tüm arayüz ölçeklerinde tutarlı ızgara görünümü sağlandı.",
-            en: "Clipboard items in fullscreen now flow seamlessly in horizontal rows (left-to-right) across all scale factors.",
-          },
-        },
-        {
           icon: "⌨️",
           tag: { tr: "Düzeltme", en: "Fix" },
           tagType: "fix",
@@ -112,12 +125,12 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
           tag: { tr: "Akıllı Arayüz", en: "Smart UI" },
           tagType: "improvement",
           title: {
-            tr: "Akıllı Dinamik Önizleme Konumlandırması",
-            en: "Smart Dynamic Preview Popover Positioning",
+            tr: "Popup Modunda Akıllı Dinamik Önizleme",
+            en: "Smart Dynamic Preview for Compact Popup Mode",
           },
           desc: {
-            tr: "Pano geçmişi ekranın sağ kenarına yakın açıldığında detay popover'ı otomatik olarak sol tarafa yerleşir; ekran taşmaları tamamen engellendi.",
-            en: "Popover automatically opens on the left when insufficient space is available on the right side of the screen.",
+            tr: "Kompakt açılır pencere ekranın sağ kenarına yakın açıldığında detay popover'ı otomatik sol tarafa taşınarak ekran dışına taşması engellenir.",
+            en: "In compact popup mode, popover automatically switches to the left side when close to the screen's right edge.",
           },
         },
         {
