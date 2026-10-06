@@ -47,7 +47,7 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
 
   const releases: ReleaseItem[] = [
     {
-      version: "v0.3.2",
+      version: "v0.3.3",
       date: isTr ? "6 Ekim 2026" : "October 6, 2026",
       isLatest: true,
       tagline: {
