@@ -1683,6 +1683,8 @@ select.form-input option:hover,
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.12s ease-in-out;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 58px;
 }
 
 .clip-item-card:hover,

@@ -47,6 +47,10 @@ export async function getClipboardHistory(
   });
 }
 
+export async function getClipboardFullImage(id: number): Promise<string | null> {
+  return invoke<string | null>("get_clipboard_full_image", { id });
+}
+
 export async function copyFromHistory(id: number): Promise<void> {
   return invoke<void>("copy_from_history", { id });
 }

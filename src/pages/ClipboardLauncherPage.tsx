@@ -7,6 +7,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
   getClipboardHistory,
+  getClipboardFullImage,
   copyFromHistory,
   deleteHistoryItem,
   clearClipboardHistory,
@@ -172,6 +173,7 @@ export default function ClipboardLauncherPage() {
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [hoverPreviewItem, setHoverPreviewItem] = useState<ClipboardItem | null>(null);
+  const [fullPreviewImage, setFullPreviewImage] = useState<string | null>(null);
   const [saveToVaultItem, setSaveToVaultItem] = useState<ClipboardItem | null>(null);
   const [previewDelayMs, setPreviewDelayMs] = useState(2000);
   const [windowMode, setWindowMode] = useState<"popup" | "fullscreen">("popup");
@@ -360,7 +362,7 @@ export default function ClipboardLauncherPage() {
       const minColWidth = panelScale === "small" ? 240 : panelScale === "large" ? 320 : 280;
       const gap = panelScale === "small" ? 10 : panelScale === "large" ? 14 : 12;
       const computed = Math.max(1, Math.floor((width + gap) / (minColWidth + gap)));
-      setColumnCount(computed);
+      setColumnCount((prev) => (prev !== computed ? computed : prev));
     };
     updateCols();
     const ro = new ResizeObserver(updateCols);
@@ -613,6 +615,25 @@ export default function ClipboardLauncherPage() {
     };
   }, [selectedIndex, items, previewDelayMs, updateElementSide]);
 
+  // Asynchronously fetch full-res image only when item is previewed
+  useEffect(() => {
+    if (!hoverPreviewItem || hoverPreviewItem.contentType !== "image") {
+      setFullPreviewImage(null);
+      return;
+    }
+    let isCancelled = false;
+    getClipboardFullImage(hoverPreviewItem.id)
+      .then((fullImg) => {
+        if (!isCancelled && fullImg) {
+          setFullPreviewImage(fullImg);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isCancelled = true;
+    };
+  }, [hoverPreviewItem]);
+
   // Mouse hover handlers
   const handleItemMouseEnter = useCallback((item: ClipboardItem, idx: number) => {
     setSelectedIndex(idx);
@@ -861,10 +882,10 @@ export default function ClipboardLauncherPage() {
 
           {/* Popover Content */}
           <div className="clip-preview-body">
-            {hoverPreviewItem.contentType === "image" && hoverPreviewItem.imageData ? (
+            {hoverPreviewItem.contentType === "image" && (fullPreviewImage || hoverPreviewItem.imageData) ? (
               <div className="clip-preview-img-box">
                 <img
-                  src={hoverPreviewItem.imageData}
+                  src={fullPreviewImage || hoverPreviewItem.imageData || ""}
                   alt="Görsel Detayı"
                   className="clip-preview-img"
                 />

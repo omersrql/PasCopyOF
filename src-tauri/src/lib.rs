@@ -2,7 +2,7 @@
 // Handles: Database, Encryption/Decryption, Clipboard, Global Hotkey, Backup, Idle Lock
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -464,8 +464,40 @@ fn init_db_schema(conn: &Connection) -> Result<()> {
 fn open_db(path: &PathBuf) -> Result<Connection> {
     let conn = Connection::open(path)?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=NORMAL;
+         PRAGMA cache_size=-8000;
+         PRAGMA temp_store=MEMORY;
+         PRAGMA mmap_size=30000000;"
+    )?;
     Ok(conn)
+}
+
+fn get_thumb_path(full_path: &str) -> PathBuf {
+    let p = Path::new(full_path);
+    if let (Some(parent), Some(file_name)) = (p.parent(), p.file_name()) {
+        parent.join(format!("thumb_{}", file_name.to_string_lossy()))
+    } else {
+        PathBuf::from(format!("{}_thumb.png", full_path))
+    }
+}
+
+fn generate_image_thumbnail(full_path: &str) -> Option<Vec<u8>> {
+    let thumb_path = get_thumb_path(full_path);
+    if thumb_path.exists() {
+        if let Ok(bytes) = std::fs::read(&thumb_path) {
+            return Some(bytes);
+        }
+    }
+    if let Ok(dyn_img) = image::open(full_path) {
+        let thumb = dyn_img.thumbnail(120, 80);
+        let _ = thumb.save(&thumb_path);
+        if let Ok(bytes) = std::fs::read(&thumb_path) {
+            return Some(bytes);
+        }
+    }
+    None
 }
 
 fn get_meta(conn: &Connection, key: &str) -> Option<String> {
@@ -1283,6 +1315,7 @@ impl ClipboardHandler for AppClipboardHandler {
                 let path_str = file_path.to_string_lossy().to_string();
 
                 if img.save_to_path(&path_str).is_ok() {
+                    let _ = generate_image_thumbnail(&path_str);
                     if let Ok(conn) = open_db(&self.db_path) {
                         let dimensions = format!("{} × {}", w, h);
                         let preview = format!("Görsel ({} × {})", w, h);
@@ -1295,15 +1328,22 @@ impl ClipboardHandler for AppClipboardHandler {
                         ).ok();
 
                         let is_dup = if let Some((old_id, ref old_path)) = existing_img {
-                            if let (Ok(new_b), Ok(old_b)) = (std::fs::read(&path_str), std::fs::read(old_path)) {
-                                if new_b == old_b {
-                                    let _ = std::fs::remove_file(&path_str);
-                                    let _ = conn.execute(
-                                        "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = ?1",
-                                        params![old_id],
-                                    );
-                                    let _ = self.app_handle.emit("clipboard-updated", ());
-                                    true
+                            let size_new = std::fs::metadata(&path_str).map(|m| m.len()).unwrap_or(0);
+                            let size_old = std::fs::metadata(old_path).map(|m| m.len()).unwrap_or(1);
+                            if size_new > 0 && size_new == size_old {
+                                if let (Ok(new_b), Ok(old_b)) = (std::fs::read(&path_str), std::fs::read(old_path)) {
+                                    if new_b == old_b {
+                                        let _ = std::fs::remove_file(&path_str);
+                                        let _ = std::fs::remove_file(get_thumb_path(&path_str));
+                                        let _ = conn.execute(
+                                            "UPDATE clipboard_history SET copied_at = datetime('now') WHERE id = ?1",
+                                            params![old_id],
+                                        );
+                                        let _ = self.app_handle.emit("clipboard-updated", ());
+                                        true
+                                    } else {
+                                        false
+                                    }
                                 } else {
                                     false
                                 }
@@ -1381,7 +1421,8 @@ fn prune_clipboard_history(conn: &Connection, max_items: u32) {
     ) {
         if let Ok(rows) = stmt.query_map(params![limit], |r| r.get::<_, String>(0)) {
             for p in rows.flatten() {
-                let _ = std::fs::remove_file(p);
+                let _ = std::fs::remove_file(&p);
+                let _ = std::fs::remove_file(get_thumb_path(&p));
             }
         }
     }
@@ -2687,9 +2728,9 @@ async fn get_clipboard_history(
                     let mut cache = image_cache.lock().unwrap();
                     if let Some(cached) = cache.get(path) {
                         Some(cached.clone())
-                    } else if let Ok(bytes) = std::fs::read(path) {
+                    } else if let Some(bytes) = generate_image_thumbnail(path) {
                         let data = format!("data:image/png;base64,{}", B64.encode(&bytes));
-                        if cache.len() > 150 {
+                        if cache.len() > 300 {
                             cache.clear();
                         }
                         cache.insert(path.clone(), data.clone());
@@ -2726,6 +2767,32 @@ async fn get_clipboard_history(
         results.push(r.map_err(|e| e.to_string())?);
     }
     Ok(results)
+}
+
+#[tauri::command]
+async fn get_clipboard_full_image(
+    id: i64,
+    state: State<'_, SafeAppState>,
+) -> Result<Option<String>, String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+    let image_path: Option<String> = conn
+        .query_row(
+            "SELECT image_path FROM clipboard_history WHERE id = ?1 AND content_type = 'image'",
+            params![id],
+            |r| r.get(0),
+        )
+        .ok();
+
+    if let Some(ref path) = image_path {
+        if let Ok(bytes) = std::fs::read(path) {
+            return Ok(Some(format!("data:image/png;base64,{}", B64.encode(&bytes))));
+        }
+    }
+    Ok(None)
 }
 
 #[tauri::command]
@@ -2831,6 +2898,7 @@ async fn delete_history_item(
         .flatten();
     if let Some(path) = img_path {
         let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(get_thumb_path(&path));
         if let Ok(st) = state.0.lock() {
             if let Ok(mut cache) = st.clipboard_image_cache.lock() {
                 cache.remove(&path);
@@ -2863,7 +2931,8 @@ async fn clear_clipboard_history(
         .query_map([], |r| r.get::<_, String>(0))
         .map_err(|e| e.to_string())?;
     for p in img_paths.flatten() {
-        let _ = std::fs::remove_file(p);
+        let _ = std::fs::remove_file(&p);
+        let _ = std::fs::remove_file(get_thumb_path(&p));
     }
     conn.execute("DELETE FROM clipboard_history WHERE is_pinned = 0", [])
         .map_err(|e| e.to_string())?;
@@ -5127,6 +5196,7 @@ pub fn run() {
             import_csv,
             // Clipboard commands
             get_clipboard_history,
+            get_clipboard_full_image,
             copy_from_history,
             delete_history_item,
             clear_clipboard_history,

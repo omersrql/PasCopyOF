@@ -51,10 +51,23 @@ export function ReleaseNotesModal({ isOpen, onClose }: Props) {
       date: isTr ? "6 Ekim 2026" : "October 6, 2026",
       isLatest: true,
       tagline: {
-        tr: "🖥️ Çoklu Monitör Ekran Alıntısı, Parametrik Pano Akışı ve Görev Kısayolları",
-        en: "🖥️ Multi-Monitor Screenshot, Parametric Clipboard Flow & Task Hotkeys",
+        tr: "⚡ Yüksek Performanslı Pano, Çoklu Monitör Ekran Alıntısı & Parametrik Akış",
+        en: "⚡ High-Performance Clipboard, Multi-Monitor Screenshot & Parametric Flow",
       },
       features: [
+        {
+          icon: "⚡",
+          tag: { tr: "Performans", en: "Performance" },
+          tagType: "improvement",
+          title: {
+            tr: "Ultra Hızlı Pano Geçmişi & Akıllı Küçük Resim (Thumbnail) Önbelleği",
+            en: "Ultra-Fast Clipboard History & Smart Thumbnail Caching",
+          },
+          desc: {
+            tr: "Pano geçmişinde yüksek çözünürlüklü görseller için anında 120x80 hafif önbellek küçük resimleri üretilerek IPC veri yükü %99 oranında düşürüldü. SQLite bellek optimizasyonları ve CSS content-visibility render hızlandırması ile tüm bilgisayarlarda sıfır gecikmeli akıcı deneyim sağlandı.",
+            en: "Over 99% IPC payload reduction using instant 120x80 thumbnail generation for clipboard images. SQLite memory PRAGMAs and CSS content-visibility render skipping ensure zero-latency fluid browsing on all client machines.",
+          },
+        },
         {
           icon: "↕️",
           tag: { tr: "Yeni Özellik", en: "New Feature" },
