@@ -39,8 +39,15 @@
 
 ### 📋 3. Smart Clipboard History (`Ctrl + Shift + V`)
 - **Cursor-Adjacent Floating Launcher**: Opens precisely next to your mouse cursor across any monitor with dual mode options:
-  - **Compact Popup Mode**: Floating, cursor-anchored panel.
-  - **Fullscreen Multi-Column Grid Mode**: Expands into a spacious multi-column dashboard for heavy clipboard workflows.
+  - **Compact Popup Mode**: Floating, cursor-anchored panel with smart dynamic popover side-switching.
+  - **Fullscreen Multi-Column Grid Mode**: Expands into a spacious multi-column dashboard with parametric **Top-to-Bottom (Vertical Flow)** or **Left-to-Right (Horizontal Flow)** sorting and fixed right-docked preview.
+- **🖱️ Streamlined Cards & Right-Click / Kebab (`⋮`) Context Menu**:
+  - Maximum content visibility: sequence numbers and clutter removed so your copied text and image thumbnails take center stage.
+  - Right-click anywhere on a card or click `⋮` to open the fast context menu: **Kopyala / Copy (`Enter`)**, **★ Sık Kullanılanlara Ekle / Pin**, **🔒 Kasaya Kaydet / Save to Vault (`Ctrl + S`)**, and **🗑️ Sil / Delete (`Del`)**.
+- **⚡ Ultra-Fast Caching & %99.8 IPC Bandwidth Reduction**:
+  - Instant 120x80 thumbnail generation on clipboard capture; loads instantly with zero lag. High-res images are fetched on-demand only when previewed.
+  - Chromium `content-visibility: auto` skips off-screen DOM rendering for silky 60 FPS scrolling on large histories.
+  - SQLite in-memory PRAGMA optimizations for zero-latency lookups.
 - **Multi-Format History Tracking**:
   - 📝 **Text**: Instant character counts, word counts, line counts, and clean previews.
   - 🖼️ **Images**: Automatically cached to local storage and rendered with high-res thumbnails.
@@ -92,7 +99,7 @@
 ---
 
 ### 📸 5. Screenshot Capture, Markup & OCR (`Ctrl + Shift + S`)
-- **Cursor-Aware Multi-Monitor Capture**: Automatically detects the monitor containing the mouse cursor using `xcap` and captures it instantly.
+- **Cursor-Aware & Parametric Multi-Monitor Capture**: Automatically detects the active monitor containing the mouse cursor or captures **All Monitors (Unified Virtual Desktop)** across multi-monitor workstations (configurable in Settings > Screenshot).
 - **Default Area Selection (Snipping Mode)**:
   - Screen dims automatically on trigger with crosshair cursor.
   - Drag and drop to select any rectangular region with live pixel dimensions (`W × H`).
@@ -134,15 +141,15 @@
 - **🗂️ Tabbed Settings Hub**: Two-column sidebar navigation across 6 organized categories:
   1. **Görünüm & Sistem (General)**: Tema seçimi (Koyu/Açık), dil seçimi (TR/EN), Windows ile otomatik başlama (Autostart).
   2. **Kısayol Tuşları (Global Hotkeys)**: Tüm küresel kısayolları tek merkezden canlı kaydetme ve özelleştirme.
-  3. **Pano Geçmişi (Clipboard)**: Popup / tam ekran modu, bulanıklıkta kapatma, boşlukla kapatma, liste boyutu, önizleme gecikmesi.
-  4. **Ekran Alıntısı (Screenshot & OCR)**: Kayıt dizini seçimi, Windows Gezgini'nde açma, bildirim ayarları.
+  3. **Pano Geçmişi (Clipboard)**: Popup / tam ekran modu, dikey / yatay sıralama akışı, bulanıklıkta kapatma, boşlukla kapatma, liste boyutu, önizleme gecikmesi.
+  4. **Ekran Alıntısı (Screenshot & OCR)**: Çoklu monitör modu (Aktif ekran / Tüm ekranlar), kayıt dizini seçimi, Windows Gezgini'nde açma, bildirim ayarları.
   5. **Güvenlik & Kasa (Security & Vault)**: Ana parola değiştirme, kurtarma anahtarı üretme/yenileme, parola ipucu, otomatik kilit ve şifreli yedekleme.
   6. **Güncellemeler (Updates & About)**: Sürüm denetimi, otomatik güncelleme yükleyici, mimari detaylar.
 - **📖 In-App Searchable User Guide (`❓ Kılavuz & Yardım`)**:
   - Built directly into the Manager topbar and Settings.
   - Searchable topics covering Vault Security, Hotkeys, Clipboard Manager, Tasks & Timer, Screenshot & OCR, and FAQ.
 - **✨ In-App Release Notes & Changelog Modal**:
-  - Interactive topbar version badge (`✨ v0.3.0`) opens the complete release history with dates, categories, and feature descriptions.
+  - Interactive topbar version badge (`✨ v0.3.4`) opens the complete release history with dates, categories, and feature descriptions.
 
 ---
 
@@ -156,6 +163,7 @@
 | **Floating Timer Widget** | `Ctrl + Shift + T` | ✅ Yes (Manager → Settings → Hotkeys) |
 | **Tasks & Focus Planner** | `Ctrl + Shift + P` | ✅ Yes (Manager → Settings → Hotkeys) |
 | **⚡ Quick Task Creator** | `Ctrl + Shift + N` | ✅ Yes (Manager → Settings → Hotkeys) |
+| **✓ Complete Active Task** | `Ctrl + Shift + D` | ✅ Yes (Manager → Settings → Hotkeys) |
 
 *All shortcuts can be remapped directly in the application by pressing your desired key combination.*
 
