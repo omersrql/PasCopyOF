@@ -92,24 +92,47 @@ const emptyForm: FormState = {
 };
 
 /** Build a Tauri-compatible shortcut string from a keyboard event. */
-function shortcutFromEvent(e: KeyboardEvent): string | null {
+function shortcutFromEvent(
+  e: KeyboardEvent,
+  forcedModifiers?: { ctrl?: boolean; alt?: boolean; shift?: boolean; meta?: boolean }
+): string | null {
   const modifiers: string[] = [];
-  if (e.ctrlKey || e.metaKey) modifiers.push("Ctrl");
-  if (e.altKey) modifiers.push("Alt");
-  if (e.shiftKey) modifiers.push("Shift");
+  const ctrl = (forcedModifiers?.ctrl ?? false) || e.ctrlKey || e.metaKey;
+  const alt = (forcedModifiers?.alt ?? false) || e.altKey;
+  const shift = (forcedModifiers?.shift ?? false) || e.shiftKey;
 
-  const key = e.key;
+  if (ctrl) modifiers.push("Ctrl");
+  if (alt) modifiers.push("Alt");
+  if (shift) modifiers.push("Shift");
+
+  let key = e.key;
+  if (
+    key === "PrintScreen" ||
+    key === "Snapshot" ||
+    key === "Print" ||
+    e.code === "PrintScreen"
+  ) {
+    key = "PrintScreen";
+  }
+
   if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
     return null;
   }
 
   let keyName: string;
   if (key === " ") keyName = "Space";
+  else if (key === "PrintScreen") keyName = "PrintScreen";
   else if (key.length === 1) keyName = key.toUpperCase();
   else keyName = key;
 
-  if (modifiers.length === 0) {
+  // Allow standalone PrintScreen or F1-F12 keys, otherwise require at least one modifier
+  const isSpecialStandalone = keyName === "PrintScreen" || /^F\d{1,2}$/i.test(keyName);
+  if (modifiers.length === 0 && !isSpecialStandalone) {
     return null;
+  }
+
+  if (modifiers.length === 0) {
+    return keyName;
   }
 
   return [...modifiers, keyName].join("+");
@@ -368,23 +391,61 @@ export default function ManagerPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!recordingShortcut) return;
+  // Helper for recording keyboard shortcuts with full Windows PrintScreen / keyup support
+  const createShortcutKeyHandler = (
+    onCancel: () => void,
+    onSave: (next: string) => Promise<void>
+  ) => {
+    const held = { ctrl: false, alt: false, shift: false, meta: false };
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+    return (e: KeyboardEvent) => {
+      held.ctrl = e.ctrlKey || e.metaKey;
+      held.alt = e.altKey;
+      held.shift = e.shiftKey;
+      held.meta = e.metaKey;
 
       if (e.key === "Escape") {
-        setRecordingShortcut(false);
+        e.preventDefault();
+        e.stopPropagation();
+        onCancel();
         return;
       }
 
-      const next = shortcutFromEvent(e);
+      const isPrintScreen =
+        e.key === "PrintScreen" ||
+        e.code === "PrintScreen" ||
+        e.key === "Snapshot" ||
+        e.key === "Print";
+
+      // On Windows, PrintScreen keydown is swallowed by the OS/Chromium.
+      // So PrintScreen only arrives on keyup, while other keys arrive on keydown.
+      if (e.type === "keyup" && !isPrintScreen) {
+        return;
+      }
+      if (e.type === "keydown" && isPrintScreen) {
+        return;
+      }
+
+      if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const next = shortcutFromEvent(e, held);
       if (!next) return;
 
-      setRecordingShortcut(false);
-      void (async () => {
+      onCancel();
+      void onSave(next);
+    };
+  };
+
+  useEffect(() => {
+    if (!recordingShortcut) return;
+    const handler = createShortcutKeyHandler(
+      () => setRecordingShortcut(false),
+      async (next) => {
         setSavingShortcut(true);
         try {
           await setLauncherShortcut(next);
@@ -395,30 +456,21 @@ export default function ManagerPage() {
         } finally {
           setSavingShortcut(false);
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingShortcut, showToast]);
 
   useEffect(() => {
     if (!recordingClipboardShortcut) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "Escape") {
-        setRecordingClipboardShortcut(false);
-        return;
-      }
-
-      const next = shortcutFromEvent(e);
-      if (!next) return;
-
-      setRecordingClipboardShortcut(false);
-      void (async () => {
+    const handler = createShortcutKeyHandler(
+      () => setRecordingClipboardShortcut(false),
+      async (next) => {
         try {
           await setClipboardShortcut(next);
           setClipboardShortcutState(next);
@@ -426,30 +478,21 @@ export default function ManagerPage() {
         } catch (err) {
           showToast(String(err), "error");
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingClipboardShortcut, showToast]);
 
   useEffect(() => {
     if (!recordingScreenshotShortcut) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "Escape") {
-        setRecordingScreenshotShortcut(false);
-        return;
-      }
-
-      const next = shortcutFromEvent(e);
-      if (!next) return;
-
-      setRecordingScreenshotShortcut(false);
-      void (async () => {
+    const handler = createShortcutKeyHandler(
+      () => setRecordingScreenshotShortcut(false),
+      async (next) => {
         try {
           await setScreenshotShortcut(next);
           setScreenshotShortcutState(next);
@@ -457,30 +500,21 @@ export default function ManagerPage() {
         } catch (err) {
           showToast(String(err), "error");
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingScreenshotShortcut, showToast]);
 
   useEffect(() => {
     if (!recordingTimerWidgetShortcut) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "Escape") {
-        setRecordingTimerWidgetShortcut(false);
-        return;
-      }
-
-      const next = shortcutFromEvent(e);
-      if (!next) return;
-
-      setRecordingTimerWidgetShortcut(false);
-      void (async () => {
+    const handler = createShortcutKeyHandler(
+      () => setRecordingTimerWidgetShortcut(false),
+      async (next) => {
         try {
           await setTimerWidgetShortcut(next);
           setTimerWidgetShortcutState(next);
@@ -488,30 +522,21 @@ export default function ManagerPage() {
         } catch (err) {
           showToast(String(err), "error");
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingTimerWidgetShortcut, showToast]);
 
   useEffect(() => {
     if (!recordingTasksShortcut) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "Escape") {
-        setRecordingTasksShortcut(false);
-        return;
-      }
-
-      const next = shortcutFromEvent(e);
-      if (!next) return;
-
-      setRecordingTasksShortcut(false);
-      void (async () => {
+    const handler = createShortcutKeyHandler(
+      () => setRecordingTasksShortcut(false),
+      async (next) => {
         try {
           await setTasksShortcut(next);
           setTasksShortcutState(next);
@@ -524,30 +549,21 @@ export default function ManagerPage() {
         } catch (err) {
           showToast(String(err), "error");
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingTasksShortcut, showToast, lang]);
 
   useEffect(() => {
     if (!recordingQuickTaskShortcut) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "Escape") {
-        setRecordingQuickTaskShortcut(false);
-        return;
-      }
-
-      const next = shortcutFromEvent(e);
-      if (!next) return;
-
-      setRecordingQuickTaskShortcut(false);
-      void (async () => {
+    const handler = createShortcutKeyHandler(
+      () => setRecordingQuickTaskShortcut(false),
+      async (next) => {
         try {
           await setQuickTaskShortcut(next);
           setQuickTaskShortcutState(next);
@@ -560,30 +576,21 @@ export default function ManagerPage() {
         } catch (err) {
           showToast(String(err), "error");
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingQuickTaskShortcut, showToast, lang]);
 
   useEffect(() => {
     if (!recordingCompleteTaskShortcut) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "Escape") {
-        setRecordingCompleteTaskShortcut(false);
-        return;
-      }
-
-      const next = shortcutFromEvent(e);
-      if (!next) return;
-
-      setRecordingCompleteTaskShortcut(false);
-      void (async () => {
+    const handler = createShortcutKeyHandler(
+      () => setRecordingCompleteTaskShortcut(false),
+      async (next) => {
         try {
           await setCompleteTaskShortcut(next);
           setCompleteTaskShortcutState(next);
@@ -596,11 +603,14 @@ export default function ManagerPage() {
         } catch (err) {
           showToast(String(err), "error");
         }
-      })();
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
     };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [recordingCompleteTaskShortcut, showToast, lang]);
 
   // Global Escape key listener to close open modals
@@ -1249,7 +1259,7 @@ export default function ManagerPage() {
                     >
                       <span className="nav-icon">⌨️</span>
                       <span className="nav-text">{t("settingsTabShortcuts")}</span>
-                      <span className="nav-pill-badge">6</span>
+                      <span className="nav-pill-badge">7</span>
                     </button>
 
                     <button

@@ -5214,5 +5214,19 @@ mod tests {
         println!("Calculated duration: {} seconds", dur);
         assert!(dur >= 44 && dur <= 46);
     }
+
+    #[test]
+    fn test_shortcut_parsing() {
+        use tauri_plugin_global_shortcut::Shortcut;
+        let s1: Result<Shortcut, _> = "Shift+PrintScreen".parse();
+        println!("s1: {:?}", s1);
+        assert!(s1.is_ok());
+
+        let s2: Result<Shortcut, _> = "PrintScreen".parse();
+        println!("s2: {:?}", s2);
+
+        let s3: Result<Shortcut, _> = "Shift+Snapshot".parse();
+        println!("s3: {:?}", s3);
+    }
 }
 
