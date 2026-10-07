@@ -20,6 +20,7 @@ import { useApp } from "../context/AppContext";
 import { SaveToVaultModal } from "../components/SaveToVaultModal";
 import { useToast } from "../hooks/useToast";
 import { ToastContainer } from "../components/Toast";
+import { createStickyNote } from "../api/notes";
 
 interface ClipboardItemCardProps {
   item: ClipboardItem;
@@ -1041,6 +1042,32 @@ export default function ClipboardLauncherPage() {
               <span>🔒</span>
               <span className="clip-context-label">{t("clipMenuVault") || t("clipSaveToVault")}</span>
               <span className="clip-context-shortcut">Ctrl+S</span>
+            </button>
+          )}
+
+          {(contextMenu.item.contentType === "text" || contextMenu.item.textContent) && (
+            <button
+              className="clip-context-menu-item"
+              onClick={async (e) => {
+                e.stopPropagation();
+                const text = contextMenu.item.textContent || "";
+                const firstLine = text.trim().split("\n")[0] || "Pano Notu";
+                const title = firstLine.slice(0, 50);
+                try {
+                  await createStickyNote({
+                    title,
+                    content: text,
+                    openDesktop: true,
+                  });
+                  showToast(lang === "tr" ? "Masaüstünde yapışkan nota aktarıldı 📝" : "Transferred to sticky note 📝", "success");
+                } catch (err) {
+                  showToast(String(err), "error");
+                }
+                setContextMenu(null);
+              }}
+            >
+              <span>📝</span>
+              <span className="clip-context-label">{t("clipboardActionSendToStickyNote") || "Yapışkan Nota Aktar"}</span>
             </button>
           )}
 

@@ -32,6 +32,7 @@ const DEFAULT_TIMER_WIDGET_SHORTCUT: &str = "Ctrl+Shift+T";
 const DEFAULT_TASKS_SHORTCUT: &str = "Ctrl+Shift+P";
 const DEFAULT_QUICK_TASK_SHORTCUT: &str = "Ctrl+Shift+N";
 const DEFAULT_COMPLETE_TASK_SHORTCUT: &str = "Ctrl+Shift+D";
+const DEFAULT_STICKY_NOTES_SHORTCUT: &str = "Ctrl+Shift+O";
 const DEFAULT_IDLE_TIMEOUT_MINUTES: u64 = 15;
 const DEFAULT_CLIPBOARD_PAGE_SIZE: u32 = 50;
 const VERIFY_MESSAGE: &str = "pascopyof-verify-ok";
@@ -50,6 +51,7 @@ pub struct AppState {
     pub tasks_shortcut: String,
     pub quick_task_shortcut: String,
     pub complete_task_shortcut: String,
+    pub sticky_notes_shortcut: String,
     pub screenshot_notification_enabled: bool,
     pub screenshot_multi_monitor_enabled: bool,
     pub screenshot_save_dir: String,
@@ -208,6 +210,24 @@ pub struct TimerStatusInfo {
 pub struct PausedTaskInfo {
     pub task_id: i64,
     pub title: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StickyNote {
+    pub id: i64,
+    pub title: String,
+    pub content: String,
+    pub color: String,
+    pub is_pinned_top: bool,
+    pub is_desktop_open: bool,
+    pub window_x: Option<f64>,
+    pub window_y: Option<f64>,
+    pub window_width: f64,
+    pub window_height: f64,
+    pub is_archived: bool,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -390,7 +410,25 @@ fn init_db_schema(conn: &Connection) -> Result<()> {
             sort_order INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
         );
-        CREATE INDEX IF NOT EXISTS idx_checklists_task_id ON task_checklists (task_id);",
+        CREATE INDEX IF NOT EXISTS idx_checklists_task_id ON task_checklists (task_id);
+
+        CREATE TABLE IF NOT EXISTS sticky_notes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            title            TEXT    NOT NULL DEFAULT '',
+            content          TEXT    NOT NULL DEFAULT '',
+            color            TEXT    NOT NULL DEFAULT '#fef08a',
+            is_pinned_top    INTEGER NOT NULL DEFAULT 0,
+            is_desktop_open  INTEGER NOT NULL DEFAULT 0,
+            window_x         REAL,
+            window_y         REAL,
+            window_width     REAL    NOT NULL DEFAULT 300.0,
+            window_height    REAL    NOT NULL DEFAULT 340.0,
+            is_archived      INTEGER NOT NULL DEFAULT 0,
+            created_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sticky_notes_updated ON sticky_notes (updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_sticky_notes_archived ON sticky_notes (is_archived);",
     )?;
 
     let table_info: Vec<String> = {
@@ -1468,11 +1506,13 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         MenuItem::with_id(app, "take_screenshot", "Capture Screenshot", true, None::<&str>)?;
     let open_tasks =
         MenuItem::with_id(app, "open_tasks", "Görevler & Odak Takibi (Tasks)", true, None::<&str>)?;
+    let new_sticky_note =
+        MenuItem::with_id(app, "new_sticky_note", "📝 Yeni Yapışkan Not (Sticky Note)", true, None::<&str>)?;
     let open_manager =
         MenuItem::with_id(app, "open_manager", "Open Manager", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit PasCopyOf", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_launcher, &show_clipboard, &take_screenshot, &open_tasks, &open_manager, &separator, &quit])?;
+    let menu = Menu::with_items(app, &[&show_launcher, &show_clipboard, &take_screenshot, &open_tasks, &new_sticky_note, &open_manager, &separator, &quit])?;
 
     let icon = app
         .default_window_icon()
@@ -1496,6 +1536,9 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
             "open_tasks" => {
                 let _ = open_tasks_window_internal(app);
+            }
+            "new_sticky_note" => {
+                let _ = create_quick_sticky_note_internal(app);
             }
             "open_manager" => {
                 if let Some(window) = app.get_webview_window("manager") {
@@ -4833,6 +4876,475 @@ async fn get_daily_summary(
     })
 }
 
+// ─── Sticky Notes (Yapışkan Notlar) ──────────────────────────────────────────
+
+fn row_to_sticky_note(row: &rusqlite::Row) -> rusqlite::Result<StickyNote> {
+    Ok(StickyNote {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        content: row.get(2)?,
+        color: row.get(3)?,
+        is_pinned_top: row.get::<_, i64>(4)? != 0,
+        is_desktop_open: row.get::<_, i64>(5)? != 0,
+        window_x: row.get(6)?,
+        window_y: row.get(7)?,
+        window_width: row.get(8)?,
+        window_height: row.get(9)?,
+        is_archived: row.get::<_, i64>(10)? != 0,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+    })
+}
+
+fn open_sticky_note_window_internal(app: &AppHandle, db_path: &PathBuf, id: i64) -> Result<(), String> {
+    let label = format!("sticky-note-{}", id);
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+
+    let conn = open_db(db_path).map_err(|e| e.to_string())?;
+    let note: StickyNote = conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())?;
+
+    let width = if note.window_width >= 200.0 { note.window_width } else { 300.0 };
+    let height = if note.window_height >= 180.0 { note.window_height } else { 340.0 };
+
+    let mut builder = WebviewWindowBuilder::new(
+        app,
+        &label,
+        WebviewUrl::App(format!("index.html#/sticky-note?id={}", id).into()),
+    )
+    .title(if note.title.trim().is_empty() { format!("Yapışkan Not #{}", id) } else { note.title.clone() })
+    .inner_size(width, height)
+    .min_inner_size(220.0, 180.0)
+    .decorations(false)
+    .transparent(true)
+    .shadow(true)
+    .resizable(true)
+    .always_on_top(note.is_pinned_top)
+    .skip_taskbar(false);
+
+    if let (Some(x), Some(y)) = (note.window_x, note.window_y) {
+        builder = builder.position(x, y);
+    } else {
+        builder = builder.center();
+    }
+
+    builder.build().map_err(|e| e.to_string())?;
+
+    let _ = conn.execute(
+        "UPDATE sticky_notes SET is_desktop_open = 1 WHERE id = ?1",
+        params![id],
+    );
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(())
+}
+
+fn close_sticky_note_window_internal(app: &AppHandle, db_path: &PathBuf, id: i64) -> Result<(), String> {
+    let label = format!("sticky-note-{}", id);
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.close();
+    }
+    if let Ok(conn) = open_db(db_path) {
+        let _ = conn.execute(
+            "UPDATE sticky_notes SET is_desktop_open = 0 WHERE id = ?1",
+            params![id],
+        );
+    }
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(())
+}
+
+fn create_quick_sticky_note_internal(app: &AppHandle) -> Result<StickyNote, String> {
+    let state = app.state::<SafeAppState>();
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO sticky_notes (title, content, color, is_pinned_top, is_desktop_open, window_width, window_height)
+         VALUES ('', '', '#fef08a', 0, 1, 300.0, 340.0)",
+        [],
+    ).map_err(|e| e.to_string())?;
+    let new_id = conn.last_insert_rowid();
+
+    let note = conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![new_id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())?;
+
+    open_sticky_note_window_internal(app, &db_path, new_id)?;
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(note)
+}
+
+fn restore_open_sticky_notes_internal(app: &AppHandle, db_path: &PathBuf) -> Result<(), String> {
+    if let Ok(conn) = open_db(db_path) {
+        let mut stmt = conn.prepare(
+            "SELECT id FROM sticky_notes WHERE is_desktop_open = 1 AND is_archived = 0 ORDER BY id ASC"
+        ).map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| row.get::<_, i64>(0)).map_err(|e| e.to_string())?;
+        let ids: Vec<i64> = rows.filter_map(|r| r.ok()).collect();
+        for id in ids {
+            let _ = open_sticky_note_window_internal(app, db_path, id);
+        }
+    }
+    Ok(())
+}
+
+fn register_sticky_notes_hotkey(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let shortcut: Shortcut = shortcut_str
+        .parse()
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = create_quick_sticky_note_internal(&app_handle);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_sticky_notes(
+    include_archived: Option<bool>,
+    state: State<'_, SafeAppState>,
+) -> Result<Vec<StickyNote>, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    let inc = include_archived.unwrap_or(false);
+
+    let query = if inc {
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes ORDER BY is_pinned_top DESC, updated_at DESC"
+    } else {
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE is_archived = 0 ORDER BY is_pinned_top DESC, updated_at DESC"
+    };
+
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], row_to_sticky_note).map_err(|e| e.to_string())?;
+    let mut notes = Vec::new();
+    for r in rows {
+        if let Ok(n) = r {
+            notes.push(n);
+        }
+    }
+    Ok(notes)
+}
+
+#[tauri::command]
+async fn get_sticky_note_by_id(
+    id: i64,
+    state: State<'_, SafeAppState>,
+) -> Result<StickyNote, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_sticky_note(
+    title: Option<String>,
+    content: Option<String>,
+    color: Option<String>,
+    open_desktop: Option<bool>,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<StickyNote, String> {
+    let t = title.unwrap_or_default();
+    let c = content.unwrap_or_default();
+    let col = color.unwrap_or_else(|| "#fef08a".to_string());
+    let should_open = open_desktop.unwrap_or(true);
+
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO sticky_notes (title, content, color, is_pinned_top, is_desktop_open, window_width, window_height)
+         VALUES (?1, ?2, ?3, 0, ?4, 300.0, 340.0)",
+        params![t, c, col, if should_open { 1 } else { 0 }],
+    ).map_err(|e| e.to_string())?;
+    let new_id = conn.last_insert_rowid();
+
+    let note = conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![new_id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())?;
+
+    if should_open {
+        let _ = open_sticky_note_window_internal(&app, &db_path, new_id);
+    }
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(note)
+}
+
+#[tauri::command]
+async fn update_sticky_note(
+    id: i64,
+    title: Option<String>,
+    content: Option<String>,
+    color: Option<String>,
+    is_pinned_top: Option<bool>,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<StickyNote, String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+
+    let current: StickyNote = conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())?;
+
+    let new_title = title.unwrap_or(current.title);
+    let new_content = content.unwrap_or(current.content);
+    let new_color = color.unwrap_or(current.color);
+    let new_pinned = is_pinned_top.unwrap_or(current.is_pinned_top);
+
+    conn.execute(
+        "UPDATE sticky_notes
+         SET title = ?1, content = ?2, color = ?3, is_pinned_top = ?4, updated_at = datetime('now', 'localtime')
+         WHERE id = ?5",
+        params![new_title, new_content, new_color, if new_pinned { 1 } else { 0 }, id],
+    ).map_err(|e| e.to_string())?;
+
+    let label = format!("sticky-note-{}", id);
+    if let Some(w) = app.get_webview_window(&label) {
+        if is_pinned_top.is_some() {
+            let _ = w.set_always_on_top(new_pinned);
+        }
+    }
+
+    let updated: StickyNote = conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(updated)
+}
+
+#[tauri::command]
+async fn update_sticky_note_geometry(
+    id: i64,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE sticky_notes
+         SET window_x = ?1, window_y = ?2, window_width = ?3, window_height = ?4, updated_at = datetime('now', 'localtime')
+         WHERE id = ?5",
+        params![x, y, width, height, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_sticky_note(
+    id: i64,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    let label = format!("sticky-note-{}", id);
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.close();
+    }
+    let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM sticky_notes WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
+async fn toggle_sticky_note_archive(
+    id: i64,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<StickyNote, String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+
+    let is_archived: i64 = conn.query_row(
+        "SELECT is_archived FROM sticky_notes WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    let next_archived = if is_archived == 1 { 0 } else { 1 };
+
+    if next_archived == 1 {
+        let label = format!("sticky-note-{}", id);
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.close();
+        }
+        conn.execute(
+            "UPDATE sticky_notes SET is_archived = 1, is_desktop_open = 0, updated_at = datetime('now', 'localtime') WHERE id = ?1",
+            params![id],
+        ).map_err(|e| e.to_string())?;
+    } else {
+        conn.execute(
+            "UPDATE sticky_notes SET is_archived = 0, updated_at = datetime('now', 'localtime') WHERE id = ?1",
+            params![id],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    let note: StickyNote = conn.query_row(
+        "SELECT id, title, content, color, is_pinned_top, is_desktop_open, window_x, window_y, window_width, window_height, is_archived, created_at, updated_at
+         FROM sticky_notes WHERE id = ?1",
+        params![id],
+        row_to_sticky_note,
+    ).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("sticky-notes-updated", ());
+    Ok(note)
+}
+
+#[tauri::command]
+async fn open_sticky_note_window(
+    id: i64,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    open_sticky_note_window_internal(&app, &db_path, id)
+}
+
+#[tauri::command]
+async fn close_sticky_note_window(
+    id: i64,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    close_sticky_note_window_internal(&app, &db_path, id)
+}
+
+#[tauri::command]
+async fn toggle_all_sticky_notes(
+    show: bool,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    let db_path = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.db_path.clone()
+    };
+    if show {
+        restore_open_sticky_notes_internal(&app, &db_path)?;
+    } else {
+        let conn = open_db(&db_path).map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT id FROM sticky_notes WHERE is_desktop_open = 1").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| row.get::<_, i64>(0)).map_err(|e| e.to_string())?;
+        for r in rows {
+            if let Ok(id) = r {
+                let label = format!("sticky-note-{}", id);
+                if let Some(w) = app.get_webview_window(&label) {
+                    let _ = w.close();
+                }
+            }
+        }
+        let _ = conn.execute("UPDATE sticky_notes SET is_desktop_open = 0 WHERE is_desktop_open = 1", []);
+        let _ = app.emit("sticky-notes-updated", ());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_sticky_notes_shortcut(state: State<'_, SafeAppState>) -> Result<String, String> {
+    let st = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(st.sticky_notes_shortcut.clone())
+}
+
+#[tauri::command]
+async fn set_sticky_notes_shortcut(
+    shortcut: String,
+    app: AppHandle,
+    state: State<'_, SafeAppState>,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let shortcut = shortcut.trim().to_string();
+    if shortcut.is_empty() {
+        return Err("Shortcut cannot be empty".into());
+    }
+
+    let old_shortcut = {
+        let st = state.0.lock().map_err(|e| e.to_string())?;
+        st.sticky_notes_shortcut.clone()
+    };
+
+    if shortcut == old_shortcut {
+        return Ok(());
+    }
+
+    if let Ok(old) = old_shortcut.parse::<Shortcut>() {
+        let _ = app.global_shortcut().unregister(old);
+    }
+
+    if let Err(err) = register_sticky_notes_hotkey(&app, &shortcut) {
+        let _ = register_sticky_notes_hotkey(&app, &old_shortcut);
+        return Err(err);
+    }
+
+    let mut st = state.0.lock().map_err(|e| e.to_string())?;
+    let conn = open_db(&st.db_path).map_err(|e| e.to_string())?;
+    set_meta(&conn, "sticky_notes_shortcut", &shortcut).map_err(|e| e.to_string())?;
+    st.sticky_notes_shortcut = shortcut;
+    Ok(())
+}
+
 #[cfg(target_os = "windows")]
 fn ensure_windows_notification_identity() {
     use std::ffi::OsStr;
@@ -4910,6 +5422,8 @@ pub fn run() {
                 .unwrap_or_else(|| DEFAULT_QUICK_TASK_SHORTCUT.to_string());
             let complete_task_shortcut = get_meta(&conn, "complete_task_shortcut")
                 .unwrap_or_else(|| DEFAULT_COMPLETE_TASK_SHORTCUT.to_string());
+            let sticky_notes_shortcut = get_meta(&conn, "sticky_notes_shortcut")
+                .unwrap_or_else(|| DEFAULT_STICKY_NOTES_SHORTCUT.to_string());
             let screenshot_notification_enabled = get_meta(&conn, "screenshot_notification_enabled")
                 .map(|v| v != "0")
                 .unwrap_or(true);
@@ -4972,6 +5486,7 @@ pub fn run() {
                 tasks_shortcut: tasks_shortcut.clone(),
                 quick_task_shortcut: quick_task_shortcut.clone(),
                 complete_task_shortcut: complete_task_shortcut.clone(),
+                sticky_notes_shortcut: sticky_notes_shortcut.clone(),
                 screenshot_notification_enabled,
                 screenshot_multi_monitor_enabled,
                 screenshot_save_dir,
@@ -5024,6 +5539,10 @@ pub fn run() {
             if let Err(e) = register_complete_task_hotkey(app.handle(), &complete_task_shortcut) {
                 eprintln!("Failed to register complete task hotkey: {e}");
             }
+            if let Err(e) = register_sticky_notes_hotkey(app.handle(), &sticky_notes_shortcut) {
+                eprintln!("Failed to register sticky notes hotkey: {e}");
+            }
+            let _ = restore_open_sticky_notes_internal(app.handle(), &db_path);
 
             // Start clipboard watcher background thread
             start_clipboard_watcher(app.handle().clone(), db_path.clone(), cache_dir.clone());
@@ -5260,6 +5779,19 @@ pub fn run() {
             set_complete_task_shortcut,
             save_recovery_key_file,
             restart_app,
+            // Sticky notes commands
+            get_sticky_notes,
+            get_sticky_note_by_id,
+            create_sticky_note,
+            update_sticky_note,
+            update_sticky_note_geometry,
+            delete_sticky_note,
+            toggle_sticky_note_archive,
+            open_sticky_note_window,
+            close_sticky_note_window,
+            toggle_all_sticky_notes,
+            get_sticky_notes_shortcut,
+            set_sticky_notes_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PasCopyOf");

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { MasterPasswordAuth } from "../components/MasterPasswordAuth";
 import { TaskPlanner } from "../components/TaskPlanner";
+import { StickyNotesManager } from "../components/StickyNotesManager";
 import { UserGuideModal } from "../components/UserGuideModal";
 import { ReleaseNotesModal } from "../components/ReleaseNotesModal";
 import { ToastContainer } from "../components/Toast";
@@ -66,6 +67,10 @@ import {
   getCompleteTaskShortcut,
   setCompleteTaskShortcut,
 } from "../api/tasks";
+import {
+  getStickyNotesShortcut,
+  setStickyNotesShortcut,
+} from "../api/notes";
 import { useApp } from "../context/AppContext";
 import type { AppTheme, AppLanguage } from "../api/config";
 import { checkAppUpdate, downloadAndInstallUpdate, getAppVersion, restartApp } from "../api/updater";
@@ -141,7 +146,7 @@ function shortcutFromEvent(
 export default function ManagerPage() {
   const { theme, setTheme, lang, setLanguage, t } = useApp();
   const [unlocked, setUnlocked] = useState(false);
-  const [activeTab, setActiveTab] = useState<"vault" | "tasks">("vault");
+  const [activeTab, setActiveTab] = useState<"vault" | "tasks" | "notes">("vault");
   const [credentials, setCredentials] = useState<CredentialSafe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -198,6 +203,10 @@ export default function ManagerPage() {
   // Complete Task Shortcut State
   const [completeTaskShortcut, setCompleteTaskShortcutState] = useState("Ctrl+Shift+D");
   const [recordingCompleteTaskShortcut, setRecordingCompleteTaskShortcut] = useState(false);
+
+  // Sticky Notes Shortcut State
+  const [stickyNotesShortcut, setStickyNotesShortcutState] = useState("Ctrl+Shift+O");
+  const [recordingStickyNotesShortcut, setRecordingStickyNotesShortcut] = useState(false);
 
   // Software Updates State
   const [appVersion, setAppVersion] = useState("0.3.2");
@@ -361,6 +370,7 @@ export default function ManagerPage() {
       getTasksShortcut().then(setTasksShortcutState).catch(() => {});
       getQuickTaskShortcut().then(setQuickTaskShortcutState).catch(() => {});
       getCompleteTaskShortcut().then(setCompleteTaskShortcutState).catch(() => {});
+      getStickyNotesShortcut().then(setStickyNotesShortcutState).catch(() => {});
       hasRecoveryKey().then(setRecoveryKeyConfigured).catch(() => {});
       getPasswordHint().then((h) => setPasswordHintInput(h || "")).catch(() => {});
       if (arguments[4] || true) {
@@ -617,6 +627,33 @@ export default function ManagerPage() {
       window.removeEventListener("keyup", handler, true);
     };
   }, [recordingCompleteTaskShortcut, showToast, lang]);
+
+  useEffect(() => {
+    if (!recordingStickyNotesShortcut) return;
+    const handler = createShortcutKeyHandler(
+      () => setRecordingStickyNotesShortcut(false),
+      async (next) => {
+        try {
+          await setStickyNotesShortcut(next);
+          setStickyNotesShortcutState(next);
+          showToast(
+            lang === "tr"
+              ? `✓ Yapışkan not kısayolu ${next} olarak ayarlandı`
+              : `✓ Sticky notes shortcut set to ${next}`,
+            "success"
+          );
+        } catch (err) {
+          showToast(String(err), "error");
+        }
+      }
+    );
+    window.addEventListener("keydown", handler, true);
+    window.addEventListener("keyup", handler, true);
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      window.removeEventListener("keyup", handler, true);
+    };
+  }, [recordingStickyNotesShortcut, showToast, lang]);
 
   // Global Escape key listener to close open modals
   useEffect(() => {
@@ -948,6 +985,13 @@ export default function ManagerPage() {
             >
               🎯 {t("tabTasks")}
             </button>
+            <button
+              type="button"
+              className={`manager-tab-btn ${activeTab === "notes" ? "active" : ""}`}
+              onClick={() => setActiveTab("notes")}
+            >
+              📝 {t("tabNotes")}
+            </button>
           </div>
         </div>
 
@@ -991,6 +1035,8 @@ export default function ManagerPage() {
       </div>
 
       {activeTab === "tasks" && <TaskPlanner showToast={showToast} />}
+
+      {activeTab === "notes" && <StickyNotesManager showToast={showToast} />}
 
       {activeTab === "vault" && !unlocked && (
         <MasterPasswordAuth
@@ -1599,6 +1645,29 @@ export default function ManagerPage() {
                                 onClick={() => setRecordingCompleteTaskShortcut(true)}
                               >
                                 {recordingCompleteTaskShortcut ? "..." : t("edit")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 8. Quick Sticky Note */}
+                          <div className="shortcut-hub-item">
+                            <div className="shortcut-hub-left">
+                              <div className="shortcut-hub-icon">📝</div>
+                              <div>
+                                <div className="shortcut-hub-name">{t("settingsStickyNotesShortcutTitle")}</div>
+                                <div className="shortcut-hub-desc">{t("settingsStickyNotesShortcutHint")}</div>
+                              </div>
+                            </div>
+                            <div className="shortcut-hub-right">
+                              <div className={`shortcut-display ${recordingStickyNotesShortcut ? "recording" : ""}`}>
+                                {recordingStickyNotesShortcut ? (lang === "tr" ? "Tuşlara basın…" : "Press keys…") : stickyNotesShortcut}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setRecordingStickyNotesShortcut(true)}
+                              >
+                                {recordingStickyNotesShortcut ? "..." : t("edit")}
                               </button>
                             </div>
                           </div>
